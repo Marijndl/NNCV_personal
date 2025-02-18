@@ -174,3 +174,4 @@ cython_debug/
 .pypirc
 *.xml
 /Weekly notebooks/data
+/.idea
