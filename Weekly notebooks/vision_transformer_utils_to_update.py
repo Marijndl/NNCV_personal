@@ -118,13 +118,19 @@ class Attention(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
 
     def forward(self, x):
-        B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        B, N, C = x.shape   # x = (batch_size, num_features, dim)
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)  # qkv = (3, B, num_heads, N num_features/tokens, C/dim // self.num_heads)
 
         #TODO: complete the forward pass
-        # q, k, v = 
+        q, k, v = qkv  #q = (2, 4, 10, 8) batch, heads, tokens, 32/4 = 8
+        d_k = torch.tensor([q.size()[-1]])
+        attn_logits = torch.matmul(q, k.transpose(-2, -1)) * self.scale / torch.sqrt(d_k) # = (2, 4, 10, 10)
+        attn_weights = self.attn_drop(F.softmax(attn_logits, dim=-1)) # = (2, 4, 10, 10)
+        attn = torch.matmul(attn_weights, v) # = (2, 4, 10, 8)
+        x = self.proj(attn.reshape(B, N, C)) 
+        x = self.proj_drop(x)
         
-        return x, attn
+        return x, attn_weights
 
 
 class Block(nn.Module):
@@ -204,7 +210,9 @@ class PatchEmbed(nn.Module):
         B, C, H, W = x.shape
         
         # TODO: Complete the forward pass
-        # x =
+        x = self.proj(x)
+        B, C, H, W = x.shape
+        x = x.reshape(B, C, H * W).permute(0, 2, 1)
 
         return x
 
