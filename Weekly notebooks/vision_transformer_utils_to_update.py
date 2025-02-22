@@ -1,6 +1,7 @@
 
 import math
 from functools import partial
+import torch.nn.functional as F
 
 import torch
 import torch.nn as nn
@@ -123,7 +124,7 @@ class Attention(nn.Module):
 
         #TODO: complete the forward pass
         q, k, v = qkv  #q = (2, 4, 10, 8) batch, heads, tokens, 32/4 = 8
-        d_k = torch.tensor([q.size()[-1]])
+        d_k = torch.tensor([q.size(-1)], device=q.device)
         attn_logits = torch.matmul(q, k.transpose(-2, -1)) * self.scale / torch.sqrt(d_k) # = (2, 4, 10, 10)
         attn_weights = self.attn_drop(F.softmax(attn_logits, dim=-1)) # = (2, 4, 10, 10)
         attn = torch.matmul(attn_weights, v) # = (2, 4, 10, 8)
