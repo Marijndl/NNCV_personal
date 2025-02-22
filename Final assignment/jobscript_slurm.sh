@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBTACH --nodes=1
-#SBTACH --ntasks=1
-#SBTACH --cpus-per-task=9
-#SBTACH --gpus=1
-#SBTACH --partition=gpu
-#SBTACH --time=04:20:00
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=18
+#SBATCH --gpus=1
+#SBATCH --partition=gpu
+#SBATCH --time=4:20:00
 
 srun apptainer exec --nv --env-file .env container.sif /bin/bash main.sh
