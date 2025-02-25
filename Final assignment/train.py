@@ -69,7 +69,7 @@ def main(args):
         ToTensor(), 
         Normalize((0.5,), (0.5,)),
     ])
-
+    print(args.data_dir)
     # Load the dataset and make a split for training and validation
     train_dataset = Cityscapes(
         args.data_dir, 
