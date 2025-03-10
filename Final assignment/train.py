@@ -31,6 +31,7 @@ from torchvision.transforms.v2 import (
 )
 
 from unet import UNet
+import numpy as np
 
 
 # Mapping class IDs to train IDs
