@@ -71,11 +71,11 @@ def get_args_parser():
 
 def main(args):
     # Initialize wandb for logging
-    wandb.init(
-        project="5lsm0-cityscapes-segmentation",  # Project name in wandb
-        name=args.experiment_id,  # Experiment name in wandb
-        config=vars(args),  # Save hyperparameters
-    )
+    # wandb.init(
+    #     project="5lsm0-cityscapes-segmentation",  # Project name in wandb
+    #     name=args.experiment_id,  # Experiment name in wandb
+    #     config=vars(args),  # Save hyperparameters
+    # )
 
     # Create output directory if it doesn't exist
     output_dir = os.path.join("checkpoints", args.experiment_id)
@@ -95,7 +95,7 @@ def main(args):
         ToImage(),
         Resize((256, 256)),
         ToDtype(torch.float32, scale=True),
-        Normalize((0.5,), (0.5,)),
+        # Normalize((0.5,), (0.5,)),
     ])
 
     # Load the dataset and make a split for training and validation
@@ -130,106 +130,120 @@ def main(args):
         num_workers=args.num_workers
     )
 
-    # Define the model
-    model = UNet(
-        in_channels=3,  # RGB images
-        n_classes=19,  # 19 classes in the Cityscapes dataset
-    ).to(device)
+    def calculate_mean(dataset):
+        mean_per_image_r, mean_per_image_g, mean_per_image_b = [], [], []
 
-    # Define the loss function
-    criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
+        for image, _ in dataset:
+            mean_per_image_r.append(torch.mean(image[0,:,:]).tolist())
+            mean_per_image_g.append(torch.mean(image[1,:,:]).tolist())
+            mean_per_image_b.append(torch.mean(image[2,:,:]).tolist())
 
-    # Define the optimizer
-    optimizer = AdamW(model.parameters(), lr=args.lr)
+        return mean_per_image_r, mean_per_image_g, mean_per_image_b
 
-    # Training loop
-    best_valid_loss = float('inf')
-    current_best_model_path = None
-    for epoch in range(args.epochs):
-        print(f"Epoch {epoch+1:04}/{args.epochs:04}")
+    mean_r, mean_g, mean_b = calculate_mean(train_dataloader.dataset)
+    print([np.mean(mean_r), np.mean(mean_g), np.mean(mean_b)])
+    print([np.std(mean_r), np.std(mean_g), np.std(mean_b)])
 
-        # Training
-        model.train()
-        for i, (images, labels) in enumerate(train_dataloader):
+    # # Define the model
+    # model = UNet(
+    #     in_channels=3,  # RGB images
+    #     n_classes=19,  # 19 classes in the Cityscapes dataset
+    # ).to(device)
 
-            labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
-            images, labels = images.to(device), labels.to(device)
+    # # Define the loss function
+    # criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
 
-            labels = labels.long().squeeze(1)  # Remove channel dimension
+    # # Define the optimizer
+    # optimizer = AdamW(model.parameters(), lr=args.lr)
 
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+    # # Training loop
+    # best_valid_loss = float('inf')
+    # current_best_model_path = None
+    # for epoch in range(args.epochs):
+    #     print(f"Epoch {epoch+1:04}/{args.epochs:04}")
 
-            wandb.log({
-                "train_loss": loss.item(),
-                "learning_rate": optimizer.param_groups[0]['lr'],
-                "epoch": epoch + 1,
-            }, step=epoch * len(train_dataloader) + i)
+    #     # Training
+    #     model.train()
+    #     for i, (images, labels) in enumerate(train_dataloader):
+
+    #         labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
+    #         images, labels = images.to(device), labels.to(device)
+
+    #         labels = labels.long().squeeze(1)  # Remove channel dimension
+
+    #         optimizer.zero_grad()
+    #         outputs = model(images)
+    #         loss = criterion(outputs, labels)
+    #         loss.backward()
+    #         optimizer.step()
+
+    #         wandb.log({
+    #             "train_loss": loss.item(),
+    #             "learning_rate": optimizer.param_groups[0]['lr'],
+    #             "epoch": epoch + 1,
+    #         }, step=epoch * len(train_dataloader) + i)
             
-        # Validation
-        model.eval()
-        with torch.no_grad():
-            losses = []
-            for i, (images, labels) in enumerate(valid_dataloader):
+    #     # Validation
+    #     model.eval()
+    #     with torch.no_grad():
+    #         losses = []
+    #         for i, (images, labels) in enumerate(valid_dataloader):
 
-                labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
-                images, labels = images.to(device), labels.to(device)
+    #             labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
+    #             images, labels = images.to(device), labels.to(device)
 
-                labels = labels.long().squeeze(1)  # Remove channel dimension
+    #             labels = labels.long().squeeze(1)  # Remove channel dimension
 
-                outputs = model(images)
-                loss = criterion(outputs, labels)
-                losses.append(loss.item())
+    #             outputs = model(images)
+    #             loss = criterion(outputs, labels)
+    #             losses.append(loss.item())
             
-                if i == 0:
-                    predictions = outputs.softmax(1).argmax(1)
+    #             if i == 0:
+    #                 predictions = outputs.softmax(1).argmax(1)
 
-                    predictions = predictions.unsqueeze(1)
-                    labels = labels.unsqueeze(1)
+    #                 predictions = predictions.unsqueeze(1)
+    #                 labels = labels.unsqueeze(1)
 
-                    predictions = convert_train_id_to_color(predictions)
-                    labels = convert_train_id_to_color(labels)
+    #                 predictions = convert_train_id_to_color(predictions)
+    #                 labels = convert_train_id_to_color(labels)
 
-                    predictions_img = make_grid(predictions.cpu(), nrow=8)
-                    labels_img = make_grid(labels.cpu(), nrow=8)
+    #                 predictions_img = make_grid(predictions.cpu(), nrow=8)
+    #                 labels_img = make_grid(labels.cpu(), nrow=8)
 
-                    predictions_img = predictions_img.permute(1, 2, 0).numpy()
-                    labels_img = labels_img.permute(1, 2, 0).numpy()
+    #                 predictions_img = predictions_img.permute(1, 2, 0).numpy()
+    #                 labels_img = labels_img.permute(1, 2, 0).numpy()
 
-                    wandb.log({
-                        "predictions": [wandb.Image(predictions_img)],
-                        "labels": [wandb.Image(labels_img)],
-                    }, step=(epoch + 1) * len(train_dataloader) - 1)
+    #                 wandb.log({
+    #                     "predictions": [wandb.Image(predictions_img)],
+    #                     "labels": [wandb.Image(labels_img)],
+    #                 }, step=(epoch + 1) * len(train_dataloader) - 1)
             
-            valid_loss = sum(losses) / len(losses)
-            wandb.log({
-                "valid_loss": valid_loss
-            }, step=(epoch + 1) * len(train_dataloader) - 1)
+    #         valid_loss = sum(losses) / len(losses)
+    #         wandb.log({
+    #             "valid_loss": valid_loss
+    #         }, step=(epoch + 1) * len(train_dataloader) - 1)
 
-            if valid_loss < best_valid_loss:
-                best_valid_loss = valid_loss
-                if current_best_model_path:
-                    os.remove(current_best_model_path)
-                current_best_model_path = os.path.join(
-                    output_dir, 
-                    f"best_model-epoch={epoch:04}-val_loss={valid_loss:04}.pth"
-                )
-                torch.save(model.state_dict(), current_best_model_path)
+    #         if valid_loss < best_valid_loss:
+    #             best_valid_loss = valid_loss
+    #             if current_best_model_path:
+    #                 os.remove(current_best_model_path)
+    #             current_best_model_path = os.path.join(
+    #                 output_dir, 
+    #                 f"best_model-epoch={epoch:04}-val_loss={valid_loss:04}.pth"
+    #             )
+    #             torch.save(model.state_dict(), current_best_model_path)
         
-    print("Training complete!")
+    # print("Training complete!")
 
-    # Save the model
-    torch.save(
-        model.state_dict(),
-        os.path.join(
-            output_dir,
-            f"final_model-epoch={epoch:04}-val_loss={valid_loss:04}.pth"
-        )
-    )
-    wandb.finish()
+    # # Save the model
+    # torch.save(
+    #     model.state_dict(),
+    #     os.path.join(
+    #         output_dir,
+    #         f"final_model-epoch={epoch:04}-val_loss={valid_loss:04}.pth"
+    #     )
+    # )
+    # wandb.finish()
 
 
 if __name__ == "__main__":
