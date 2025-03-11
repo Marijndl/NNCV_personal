@@ -30,7 +30,7 @@ from torchvision.transforms.v2 import (
     ToDtype,
     InterpolationMode,
 )
-from torchmetrics.segmentation import DiceScore
+from utils import * 
 
 from unet import UNet
 
@@ -149,7 +149,6 @@ def main(args):
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
-    dice_score = DiceScore(num_classes=19, average="micro")
 
     # Define the optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr)
