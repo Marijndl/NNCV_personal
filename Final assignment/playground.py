@@ -21,7 +21,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Define model with the new number of classes
 num_classes_new = 19  # Set to your new number of classes
-net = UNet()  # Ensure your UNet constructor supports this
+net = UNet().to(device)  # Ensure your UNet constructor supports this
 
 # Load pre-trained weights
 weights_path = os.path.join(os.path.dirname(__file__), "unet_carvana_1.pth")
@@ -36,8 +36,10 @@ net.load_state_dict(state_dict, strict=False)  # strict=False ignores missing ke
 # Reinitialize the last layer with the correct number of output classes
 net.outc = OutConv(net.outc.conv.in_channels, num_classes_new)
 
-net.to(device)  # Move model to GPU if available
+# net.to(device)  # Move model to GPU if available
 
 # Print layers to verify
 for name, param in net.named_parameters():
     print(name, param.shape)
+
+print(next(net.parameters()).is_cuda)

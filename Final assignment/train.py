@@ -30,9 +30,8 @@ from torchvision.transforms.v2 import (
     ToDtype,
     InterpolationMode,
 )
-from utils import * 
-
-from unet import UNet
+from utils import *
+from unet_model import UNet, OutConv
 
 
 # Mapping class IDs to train IDs
@@ -61,6 +60,7 @@ def get_args_parser():
 
     parser = ArgumentParser("Training script for a PyTorch U-Net model")
     parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
+    parser.add_argument("--checkpoint-dir", type=str, default="./pretrain_weights/milesial", help="Path to pretrained weights")
     parser.add_argument("--batch-size", type=int, default=64, help="Training batch size")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
@@ -143,9 +143,23 @@ def main(args):
 
     # Define the model
     model = UNet(
-        in_channels=3,  # RGB images
+        n_channels=3,  # RGB images
         n_classes=19,  # 19 classes in the Cityscapes dataset
     ).to(device)
+
+    # Load pre-trained weights
+    weights_path = os.path.join(args.checkpoint_dir, "unet_carvana_1.pth")
+    state_dict = torch.load(weights_path, map_location=device)
+
+    # Remove the last layer's weights (assuming "out.conv.weight" and "out.conv.bias" are its names)
+    state_dict = {k: v for k, v in state_dict.items() if not k.startswith("outc.conv")}
+
+    # Load filtered state_dict
+    model.load_state_dict(state_dict, strict=False)  # strict=False ignores missing keys (like out.conv)
+
+    # Reinitialize the last layer with the correct number of output classes
+    model.outc = OutConv(model.outc.conv.in_channels, 19)
+    model.to(device)
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
