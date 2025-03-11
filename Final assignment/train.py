@@ -113,7 +113,7 @@ def main(args):
         split="train", 
         mode="fine", 
         target_type="semantic", 
-        transforms=transform_img,
+        transform=transform_img,
         target_transform=transform_mask,
     )
     valid_dataset = Cityscapes(
@@ -121,7 +121,7 @@ def main(args):
         split="val", 
         mode="fine", 
         target_type="semantic", 
-        transforms=transform_img,
+        transform=transform_img,
         target_transform=transform_mask,
     )
 
