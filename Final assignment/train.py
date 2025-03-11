@@ -28,6 +28,7 @@ from torchvision.transforms.v2 import (
     Resize,
     ToImage,
     ToDtype,
+    InterpolationMode,
 )
 
 from unet import UNet
@@ -90,12 +91,19 @@ def main(args):
     # Define the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Define the transforms to apply to the data
-    transform = Compose([
+    # Define the transforms to apply to the images
+    transform_img = Compose([
         ToImage(),
-        Resize((256, 256)),
+        Resize((256, 256), interpolation=InterpolationMode.BILINEAR),
         ToDtype(torch.float32, scale=True),
         Normalize((0.2854, 0.3227, 0.2819), (0.04797, 0.04296, 0.04188)),
+    ])
+
+    # Define the transforms to apply to the labels
+    transform_mask = Compose([
+        ToImage(),
+        Resize((256, 256), interpolation=InterpolationMode.NEAREST),
+        ToDtype(torch.float32, scale=True),
     ])
 
     # Load the dataset and make a split for training and validation
@@ -104,14 +112,16 @@ def main(args):
         split="train", 
         mode="fine", 
         target_type="semantic", 
-        transforms=transform
+        transforms=transform_img,
+        target_transform=transform_mask,
     )
     valid_dataset = Cityscapes(
         args.data_dir, 
         split="val", 
         mode="fine", 
         target_type="semantic", 
-        transforms=transform
+        transforms=transform_img,
+        target_transform=transform_mask,
     )
 
     train_dataset = wrap_dataset_for_transforms_v2(train_dataset)

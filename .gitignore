@@ -176,3 +176,4 @@ cython_debug/
 /Weekly notebooks/data
 /.idea
 /Weekly notebooks/*.pth
+/submission
