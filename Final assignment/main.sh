@@ -2,6 +2,7 @@ wandb login
 
 python3 train.py \
     --data-dir ./data/cityscapes \
+    --checkpoint-dir ./pretrain_weights/milesial \
     --batch-size 64 \
     --epochs 100 \
     --lr 0.001 \
