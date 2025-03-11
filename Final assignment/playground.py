@@ -15,17 +15,29 @@ from torchvision.transforms.v2 import (
     ToImage,
     ToDtype,
 )
+from unet_model import UNet, OutConv
 
-from unet import UNet
-from vltseg.models.eva02 import EVA02
-
-# Define the device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
 
-# Load pretrained weights
-teacher_model = EVA02().to(device)
-checkpoint = torch.load('vltseg_checkpoint_mapillary+cityscapes_2.pth')
-teacher_model.load_state_dict(checkpoint['model_state_dict'])
-teacher_model.eval()  # Set the model to evaluation mode
+# Define model with the new number of classes
+num_classes_new = 19  # Set to your new number of classes
+net = UNet()  # Ensure your UNet constructor supports this
 
+# Load pre-trained weights
+weights_path = os.path.join(os.path.dirname(__file__), "unet_carvana_1.pth")
+state_dict = torch.load(weights_path, map_location=device)
+
+# Remove the last layer's weights (assuming "out.conv.weight" and "out.conv.bias" are its names)
+state_dict = {k: v for k, v in state_dict.items() if not k.startswith("outc.conv")}
+
+# Load filtered state_dict
+net.load_state_dict(state_dict, strict=False)  # strict=False ignores missing keys (like out.conv)
+
+# Reinitialize the last layer with the correct number of output classes
+net.outc = OutConv(net.outc.conv.in_channels, num_classes_new)
+
+net.to(device)  # Move model to GPU if available
+
+# Print layers to verify
+for name, param in net.named_parameters():
+    print(name, param.shape)
