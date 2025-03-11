@@ -196,7 +196,7 @@ def main(args):
                 loss = criterion(outputs, labels)
                 dice = dice_score(outputs, labels)
                 losses.append(loss.item())
-                dice_scores.append(dice.item())
+                dice_scores.append(dice)
             
                 if i == 0:
                     predictions = outputs.softmax(1).argmax(1)
