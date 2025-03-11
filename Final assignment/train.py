@@ -30,6 +30,7 @@ from torchvision.transforms.v2 import (
     ToDtype,
     InterpolationMode,
 )
+from torchmetrics.segmentation import DiceScore
 
 from unet import UNet
 
@@ -148,6 +149,7 @@ def main(args):
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
+    dice_score = DiceScore(num_classes=19, average="micro")
 
     # Define the optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr)
@@ -183,6 +185,7 @@ def main(args):
         model.eval()
         with torch.no_grad():
             losses = []
+            dice_scores = []
             for i, (images, labels) in enumerate(valid_dataloader):
 
                 labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
@@ -192,7 +195,9 @@ def main(args):
 
                 outputs = model(images)
                 loss = criterion(outputs, labels)
+                dice = dice_score(outputs, labels)
                 losses.append(loss.item())
+                dice_scores.append(dice.item())
             
                 if i == 0:
                     predictions = outputs.softmax(1).argmax(1)
@@ -215,8 +220,10 @@ def main(args):
                     }, step=(epoch + 1) * len(train_dataloader) - 1)
             
             valid_loss = sum(losses) / len(losses)
+            valid_dice = sum(dice_scores) / len(dice_scores)
             wandb.log({
-                "valid_loss": valid_loss
+                "valid_loss": valid_loss,
+                "valid_dice_score": valid_dice,
             }, step=(epoch + 1) * len(train_dataloader) - 1)
 
             if valid_loss < best_valid_loss:
