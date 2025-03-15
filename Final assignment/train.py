@@ -97,7 +97,7 @@ def main(args):
         ToImage(),
         Resize((256, 256), interpolation=InterpolationMode.BILINEAR),
         ToDtype(torch.float32, scale=True),
-        Normalize((0.2854, 0.3227, 0.2819), (0.04797, 0.04296, 0.04188)),
+        Normalize((0.28689554, 0.32513303, 0.28389177), (0.18696375, 0.19017339, 0.18720214)),
     ])
     
     # Load the dataset and make a split for training and validation
@@ -132,11 +132,25 @@ def main(args):
         num_workers=args.num_workers
     )
 
+    # Define weight initialization
+    def init_weights(m):
+        """Initialize weights using Xavier initialization."""
+        if isinstance(m, nn.Conv2d):  # Applies to DoubleConv and OutConv layers
+            torch.nn.init.xavier_uniform_(m.weight)
+            if m.bias is not None:
+                torch.nn.init.zeros_(m.bias)
+        elif isinstance(m, nn.BatchNorm2d):  # BatchNorm layers should have weights = 1 and bias = 0
+            torch.nn.init.constant_(m.weight, 1)
+            torch.nn.init.constant_(m.bias, 0)
+
     # Define the model
     model = UNet(
         in_channels=3,  # RGB images
         n_classes=19,  # 19 classes in the Cityscapes dataset
     ).to(device)
+
+    # Apply the xavier weight init
+    model.apply(init_weights)
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
