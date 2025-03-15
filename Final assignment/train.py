@@ -29,6 +29,11 @@ from torchvision.transforms.v2 import (
     ToImage,
     ToDtype,
     InterpolationMode,
+    RandomRotation,
+    RandomHorizontalFlip,
+    RandomVerticalFlip,
+    RandomResizedCrop,
+    RandomAffine
 )
 from utils import * 
 
@@ -95,7 +100,10 @@ def main(args):
     # Define the transforms to apply to the images
     transform = Compose([
         ToImage(),
-        Resize((256, 256), interpolation=InterpolationMode.BILINEAR),
+        RandomHorizontalFlip(p=0.5),
+        RandomRotation(degrees=10),
+        RandomResizedCrop(size=(256, 256), scale=(0.8, 1.2), interpolation=InterpolationMode.BILINEAR),
+        RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=10),
         ToDtype(torch.float32, scale=True),
         Normalize((0.28689554, 0.32513303, 0.28389177), (0.18696375, 0.19017339, 0.18720214)),
     ])
