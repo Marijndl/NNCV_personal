@@ -148,9 +148,9 @@ def main(args):
             torch.nn.init.xavier_uniform_(m.weight)
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias)
-        elif isinstance(m, nn.BatchNorm2d):  # BatchNorm layers should have weights = 1 and bias = 0
-            torch.nn.init.constant_(m.weight, 1)
-            torch.nn.init.constant_(m.bias, 0)
+        # elif isinstance(m, nn.BatchNorm2d):  # BatchNorm layers should have weights = 1 and bias = 0
+        #     torch.nn.init.constant_(m.weight, 1)
+        #     torch.nn.init.constant_(m.bias, 0)
 
     # Define the model
     model = UNet(
@@ -166,7 +166,7 @@ def main(args):
 
     # Define the optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr)
-    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs // 2, eta_min=1e-6)
+    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
 
     # Training loop
     best_valid_loss = float('inf')
