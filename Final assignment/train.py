@@ -141,8 +141,6 @@ def objective(trial):
             loss.backward()
             optimizer.step()
 
-        scheduler.step()
-
         model.eval()
         valid_dice_scores = []
         with torch.no_grad():
@@ -155,6 +153,14 @@ def objective(trial):
 
         avg_dice = sum(valid_dice_scores) / len(valid_dice_scores)
         best_valid_dice = max(best_valid_dice, avg_dice)
+
+        if scheduler:
+            if isinstance(scheduler, CosineAnnealingLR) or isinstance(scheduler, StepLR):
+                scheduler.step()
+            elif isinstance(scheduler, ReduceLROnPlateau):
+                # Update the scheduler based on validation loss or any metric
+                val_loss = max(best_valid_dice)  # You need to compute validation loss here
+                scheduler.step(val_loss)  # Pass the validation loss to `step()`
 
         trial.report(avg_dice, epoch)
         if trial.should_prune():

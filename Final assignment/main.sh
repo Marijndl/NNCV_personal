@@ -19,3 +19,5 @@ python3 train.py \
     --num-workers 10 \
     --seed 42 \
     --experiment-id "unet-training" \
+    --optuna-trials 40\
+    --run-optuna
