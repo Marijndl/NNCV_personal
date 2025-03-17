@@ -159,7 +159,7 @@ def objective(trial):
                 scheduler.step()
             elif isinstance(scheduler, ReduceLROnPlateau):
                 # Update the scheduler based on validation loss or any metric
-                val_loss = max(best_valid_dice)  # You need to compute validation loss here
+                val_loss = best_valid_dice  # You need to compute validation loss here
                 scheduler.step(val_loss)  # Pass the validation loss to `step()`
 
         trial.report(avg_dice, epoch)
