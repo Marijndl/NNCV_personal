@@ -22,23 +22,28 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
 from torchvision.utils import make_grid
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR, ReduceLROnPlateau
 from torchvision.transforms.v2 import (
-    Compose,
-    Normalize,
-    Resize,
-    ToImage,
-    ToDtype,
-    InterpolationMode,
-    RandomRotation,
-    RandomHorizontalFlip,
-    RandomVerticalFlip,
-    RandomResizedCrop,
-    RandomAffine
+    Compose, Normalize, Resize, ToImage, ToDtype, InterpolationMode,
+    RandomRotation, RandomHorizontalFlip, RandomVerticalFlip,
+    RandomResizedCrop, RandomAffine
 )
 from utils import * 
 
 from unet import UNet
+
+import subprocess
+import sys
+
+package_name = "optuna"
+
+try:
+    __import__(package_name)
+except ImportError:
+    print(f"{package_name} not found. Installing...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", package_name])
+
+import optuna  # Now the package should be available
 
 
 # Mapping class IDs to train IDs
@@ -73,32 +78,39 @@ def get_args_parser():
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
+    parser.add_argument("--optuna-trials", type=int, default=50, help="Number of Optuna trials")
+    parser.add_argument("--run-optuna", action="store_true", help="Enable Optuna hyperparameter optimization")
 
     return parser
 
 
-def main(args):
-    # Initialize wandb for logging
-    wandb.init(
-        project="5lsm0-cityscapes-segmentation",  # Project name in wandb
-        name=args.experiment_id,  # Experiment name in wandb
-        config=vars(args),  # Save hyperparameters
-    )
+def objective(trial):
+    """Objective function for Optuna Bayesian optimization."""
+    lr = trial.suggest_loguniform("lr", 1e-5, 1e-2)
+    weight_decay = trial.suggest_loguniform("weight_decay", 1e-6, 1e-3)
 
-    # Create output directory if it doesn't exist
-    output_dir = os.path.join("checkpoints", args.experiment_id)
-    os.makedirs(output_dir, exist_ok=True)
+    scheduler_type = trial.suggest_categorical("scheduler", ["StepLR", "CosineAnnealingLR", "ReduceLROnPlateau"])
+    
+    if scheduler_type == "StepLR":
+        step_size = trial.suggest_int("step_size", 5, 30)
+        gamma = trial.suggest_uniform("gamma", 0.1, 0.9)
+    elif scheduler_type == "CosineAnnealingLR":
+        T_max = trial.suggest_int("T_max", 10, 50)
+    elif scheduler_type == "ReduceLROnPlateau":
+        patience = trial.suggest_int("patience", 3, 10)
+        factor = trial.suggest_uniform("factor", 0.1, 0.9)
 
-    # Set seed for reproducability
-    # If you add other sources of randomness (NumPy, Random), 
-    # make sure to set their seeds as well
-    torch.manual_seed(args.seed)
-    torch.backends.cudnn.deterministic = True
-
-    # Define the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = UNet(in_channels=3, n_classes=19).to(device)
+    optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
-    # Define the transforms to apply to the images
+    if scheduler_type == "StepLR":
+        scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
+    elif scheduler_type == "CosineAnnealingLR":
+        scheduler = CosineAnnealingLR(optimizer, T_max=T_max)
+    elif scheduler_type == "ReduceLROnPlateau":
+        scheduler = ReduceLROnPlateau(optimizer, mode="max", factor=factor, patience=patience)
+
     transform = Compose([
         ToImage(),
         RandomHorizontalFlip(p=0.5),
@@ -106,164 +118,65 @@ def main(args):
         RandomResizedCrop(size=(256, 256), scale=(0.8, 1.2), interpolation=InterpolationMode.BILINEAR),
         RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=10),
         ToDtype(torch.float32, scale=True),
-        Normalize((0.28689554, 0.32513303, 0.28389177), (0.18696375, 0.19017339, 0.18720214)),
+        Normalize((0.2869, 0.3251, 0.2839), (0.1869, 0.1901, 0.1872)),
     ])
+
+    train_dataset = wrap_dataset_for_transforms_v2(Cityscapes(args.data_dir, split="train", mode="fine", target_type="semantic", transforms=transform))
+    valid_dataset = wrap_dataset_for_transforms_v2(Cityscapes(args.data_dir, split="val", mode="fine", target_type="semantic", transforms=transform))
+
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+
+    criterion = nn.CrossEntropyLoss(ignore_index=255)
     
-    # Load the dataset and make a split for training and validation
-    train_dataset = Cityscapes(
-        args.data_dir, 
-        split="train", 
-        mode="fine", 
-        target_type="semantic", 
-        transforms=transform,
-    )
-    valid_dataset = Cityscapes(
-        args.data_dir, 
-        split="val", 
-        mode="fine", 
-        target_type="semantic", 
-        transforms=transform,
-    )
-
-    train_dataset = wrap_dataset_for_transforms_v2(train_dataset)
-    valid_dataset = wrap_dataset_for_transforms_v2(valid_dataset)
-
-    train_dataloader = DataLoader(
-        train_dataset, 
-        batch_size=args.batch_size, 
-        shuffle=True,
-        num_workers=args.num_workers
-    )
-    valid_dataloader = DataLoader(
-        valid_dataset, 
-        batch_size=args.batch_size, 
-        shuffle=False,
-        num_workers=args.num_workers
-    )
-
-    # Define weight initialization
-    def init_weights(m):
-        """Initialize weights using Xavier initialization."""
-        if isinstance(m, nn.Conv2d):  # Applies to DoubleConv and OutConv layers
-            torch.nn.init.xavier_uniform_(m.weight)
-            if m.bias is not None:
-                torch.nn.init.zeros_(m.bias)
-        # elif isinstance(m, nn.BatchNorm2d):  # BatchNorm layers should have weights = 1 and bias = 0
-        #     torch.nn.init.constant_(m.weight, 1)
-        #     torch.nn.init.constant_(m.bias, 0)
-
-    # Define the model
-    model = UNet(
-        in_channels=3,  # RGB images
-        n_classes=19,  # 19 classes in the Cityscapes dataset
-    ).to(device)
-
-    # Apply the xavier weight init
-    model.apply(init_weights)
-
-    # Define the loss function
-    criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
-
-    # Define the optimizer
-    optimizer = AdamW(model.parameters(), lr=args.lr)
-    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
-
-    # Training loop
-    best_valid_loss = float('inf')
-    current_best_model_path = None
+    best_valid_dice = 0.0
     for epoch in range(args.epochs):
-        print(f"Epoch {epoch+1:04}/{args.epochs:04}")
-
-        # Training
         model.train()
-        for i, (images, labels) in enumerate(train_dataloader):
-
-            labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
+        for images, labels in train_dataloader:
+            labels = convert_to_train_id(labels).long().squeeze(1)
             images, labels = images.to(device), labels.to(device)
-
-            labels = labels.long().squeeze(1)  # Remove channel dimension
-
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
 
-            wandb.log({
-                "train_loss": loss.item(),
-                "learning_rate": optimizer.param_groups[0]['lr'],
-                "epoch": epoch + 1,
-            }, step=epoch * len(train_dataloader) + i)
-        
         scheduler.step()
 
-        # Validation
         model.eval()
+        valid_dice_scores = []
         with torch.no_grad():
-            losses = []
-            dice_scores = []
-            for i, (images, labels) in enumerate(valid_dataloader):
-
-                labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
+            for images, labels in valid_dataloader:
+                labels = convert_to_train_id(labels).long().squeeze(1)
                 images, labels = images.to(device), labels.to(device)
-
-                labels = labels.long().squeeze(1)  # Remove channel dimension
-
                 outputs = model(images)
-                loss = criterion(outputs, labels)
                 dice = dice_score(outputs, labels)
-                losses.append(loss.item())
-                dice_scores.append(dice)
-            
-                if i == 0:
-                    predictions = outputs.softmax(1).argmax(1)
+                valid_dice_scores.append(dice)
 
-                    predictions = predictions.unsqueeze(1)
-                    labels = labels.unsqueeze(1)
+        avg_dice = sum(valid_dice_scores) / len(valid_dice_scores)
+        best_valid_dice = max(best_valid_dice, avg_dice)
 
-                    predictions = convert_train_id_to_color(predictions)
-                    labels = convert_train_id_to_color(labels)
+        trial.report(avg_dice, epoch)
+        if trial.should_prune():
+            raise optuna.exceptions.TrialPruned()
 
-                    predictions_img = make_grid(predictions.cpu(), nrow=8)
-                    labels_img = make_grid(labels.cpu(), nrow=8)
+    return best_valid_dice
 
-                    predictions_img = predictions_img.permute(1, 2, 0).numpy()
-                    labels_img = labels_img.permute(1, 2, 0).numpy()
+def main(args):
+    wandb.init(project="5lsm0-cityscapes-segmentation", name=args.experiment_id, config=vars(args))
 
-                    wandb.log({
-                        "predictions": [wandb.Image(predictions_img)],
-                        "labels": [wandb.Image(labels_img)],
-                    }, step=(epoch + 1) * len(train_dataloader) - 1)
-            
-            valid_loss = sum(losses) / len(losses)
-            valid_dice = sum(dice_scores) / len(dice_scores)
-            wandb.log({
-                "valid_loss": valid_loss,
-                "valid_dice_score": valid_dice,
-            }, step=(epoch + 1) * len(train_dataloader) - 1)
+    if args.run_optuna:
+        study = optuna.create_study(direction="maximize")
+        study.optimize(objective, n_trials=args.optuna_trials)
 
-            if valid_loss < best_valid_loss:
-                best_valid_loss = valid_loss
-                if current_best_model_path:
-                    os.remove(current_best_model_path)
-                current_best_model_path = os.path.join(
-                    output_dir, 
-                    f"best_model-epoch={epoch:04}-val_loss={valid_loss:04}.pth"
-                )
-                torch.save(model.state_dict(), current_best_model_path)
-        
-    print("Training complete!")
+        print("Best Hyperparameters:", study.best_trial.params)
+        return  # Exit after tuning
 
-    # Save the model
-    torch.save(
-        model.state_dict(),
-        os.path.join(
-            output_dir,
-            f"final_model-epoch={epoch:04}-val_loss={valid_loss:04}.pth"
-        )
-    )
-    wandb.finish()
+    # Train with default args if Optuna is not enabled
+    best_params = {"lr": args.lr, "weight_decay": 1e-4, "scheduler": "CosineAnnealingLR", "T_max": args.epochs}
+    print(f"Training U-Net with default params: {best_params}")
 
+    # You can call `objective()` here with best params if you want to run training with optimal params found earlier.
 
 if __name__ == "__main__":
     parser = get_args_parser()
