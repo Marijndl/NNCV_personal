@@ -19,27 +19,50 @@ from unet_model import UNet, OutConv
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Define model with the new number of classes
-num_classes_new = 19  # Set to your new number of classes
-net = UNet().to(device)  # Ensure your UNet constructor supports this
-
 # Load pre-trained weights
 weights_path = os.path.join(os.path.dirname(__file__), "unet_carvana_1.pth")
 state_dict = torch.load(weights_path, map_location=device)
 
-# Remove the last layer's weights (assuming "out.conv.weight" and "out.conv.bias" are its names)
-state_dict = {k: v for k, v in state_dict.items() if not k.startswith("outc.conv")}
+# Filter out decoder weights (assuming decoder layers start with "up" or "outc")
+encoder_state_dict = {k: v for k, v in state_dict.items() if not k.startswith(("up", "outc"))}
 
-# Load filtered state_dict
-net.load_state_dict(state_dict, strict=False)  # strict=False ignores missing keys (like out.conv)
+# Define model and load encoder weights
+num_classes_new = 19  # Update number of classes
+model = UNet().to(device)
+model.load_state_dict(encoder_state_dict, strict=False)  # Load only encoder weights
 
-# Reinitialize the last layer with the correct number of output classes
-net.outc = OutConv(net.outc.conv.in_channels, num_classes_new)
+# Reinitialize decoder layers using Xavier initialization
+def initialize_weights(m):
+    if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+        nn.init.xavier_uniform_(m.weight)
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
 
-# net.to(device)  # Move model to GPU if available
+# Apply the initialization to decoder layers
+for name, module in model.named_modules():
+    if name.startswith(("up", "outc")):  # Apply to decoder layers
+        module.apply(initialize_weights)
+
 
 # Print layers to verify
-for name, param in net.named_parameters():
+for name, param in model.named_parameters():
     print(name, param.shape)
 
-print(next(net.parameters()).is_cuda)
+
+# Freeze encoder layers
+for name, param in model.named_parameters():
+    if not name.startswith(("up", "outc")):  # Encoder layers
+        param.requires_grad = False  # Freeze encoder
+
+# Only optimize decoder layers
+decoder_params = [param for name, param in model.named_parameters() if name.startswith(("up", "outc"))]
+
+# Define optimizer (only for decoder)
+optimizer = torch.optim.AdamW(decoder_params, lr=1e-4, weight_decay=1e-4)
+
+# Check which parameters are being updated
+for name, param in model.named_parameters():
+    print(f"{name}: requires_grad={param.requires_grad}")
+
+# Verify CUDA
+print(next(model.parameters()).is_cuda)

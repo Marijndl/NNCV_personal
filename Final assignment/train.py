@@ -22,6 +22,7 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
 from torchvision.utils import make_grid
+from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR
 from torchvision.transforms.v2 import (
     Compose,
     Normalize,
@@ -97,7 +98,7 @@ def main(args):
         ToImage(),
         Resize((256, 256), interpolation=InterpolationMode.BILINEAR),
         ToDtype(torch.float32, scale=True),
-        Normalize((0.2854, 0.3227, 0.2819), (0.04797, 0.04296, 0.04188)),
+        Normalize((0.2869, 0.3251, 0.2839), (0.1869, 0.1901, 0.1872)),
     ])
     
     # Load the dataset and make a split for training and validation
@@ -132,31 +133,51 @@ def main(args):
         num_workers=args.num_workers
     )
 
-    # Define the model
-    model = UNet(
-        n_channels=3,  # RGB images
-        n_classes=19,  # 19 classes in the Cityscapes dataset
-    ).to(device)
-
     # Load pre-trained weights
     weights_path = os.path.join(args.checkpoint_dir, "unet_carvana_1.pth")
     state_dict = torch.load(weights_path, map_location=device)
 
-    # Remove the last layer's weights (assuming "out.conv.weight" and "out.conv.bias" are its names)
-    state_dict = {k: v for k, v in state_dict.items() if not k.startswith("outc.conv")}
+    # Filter out decoder weights (assuming decoder layers start with "up" or "outc")
+    encoder_state_dict = {k: v for k, v in state_dict.items() if not k.startswith(("up", "outc"))}
 
-    # Load filtered state_dict
-    model.load_state_dict(state_dict, strict=False)  # strict=False ignores missing keys (like out.conv)
+    # Define model and load encoder weights
+    num_classes_new = 19  # Update number of classes
+    model = UNet().to(device)
+    model.load_state_dict(encoder_state_dict, strict=False)  # Load only encoder weights
 
-    # Reinitialize the last layer with the correct number of output classes
-    model.outc = OutConv(model.outc.conv.in_channels, 19)
-    model.to(device)
+    # Reinitialize decoder layers using Xavier initialization
+    def initialize_weights(m):
+        if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+            nn.init.xavier_uniform_(m.weight)
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
+
+    # Apply the initialization to decoder layers
+    for name, module in model.named_modules():
+        if name.startswith(("up", "outc")):  # Apply to decoder layers
+            module.apply(initialize_weights)
+
+    # Freeze encoder layers
+    for name, param in model.named_parameters():
+        if not name.startswith(("up", "outc")):  # Encoder layers
+            param.requires_grad = False  # Freeze encoder
+
+    # Only optimize decoder layers
+    decoder_params = [param for name, param in model.named_parameters() if name.startswith(("up", "outc"))]
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
 
     # Define the optimizer
-    optimizer = AdamW(model.parameters(), lr=args.lr)
+    optimizer = AdamW(decoder_params, lr=args.lr)
+    # Define warmup function
+    def lr_lambda(epoch):
+        if epoch < 10:
+            return (epoch + 1) / 10  # Linear warmup
+        else:
+            return 1  # After warmup, let CosineAnnealing take over
+    warmup_scheduler = LambdaLR(optimizer, lr_lambda)
+    cosine_scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs - 10, eta_min=1e-6)
 
     # Training loop
     best_valid_loss = float('inf')
@@ -184,7 +205,13 @@ def main(args):
                 "learning_rate": optimizer.param_groups[0]['lr'],
                 "epoch": epoch + 1,
             }, step=epoch * len(train_dataloader) + i)
-            
+
+        # Step the scheduler
+        if epoch < 10:
+            warmup_scheduler.step()
+        else:
+            cosine_scheduler.step()
+        
         # Validation
         model.eval()
         with torch.no_grad():
@@ -252,7 +279,7 @@ def main(args):
     )
     wandb.finish()
 
-
+    
 if __name__ == "__main__":
     parser = get_args_parser()
     args = parser.parse_args()
