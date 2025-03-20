@@ -100,7 +100,6 @@ def main(args):
     # Define common transforms (resize to 1024 first, then resize for student)
     transform_common = Compose([
         ToImage(),
-        Resize((1024, 1024), interpolation=InterpolationMode.BILINEAR),
         ToDtype(torch.float32, scale=True),
     ])
 
@@ -113,8 +112,17 @@ def main(args):
 
     # Student-specific normalization and downscaling
     transform_student = Compose([
+        ToImage(),
         Resize((256, 256), interpolation=InterpolationMode.BILINEAR),
         Normalize((0.2869, 0.3251, 0.2839), (0.1869, 0.1901, 0.1872)),
+        ToDtype(torch.float32, scale=True),
+    ])
+
+    transform_label = Compose([
+        ToImage(),
+        Resize((256, 256), interpolation=InterpolationMode.NEAREST),
+        ToDtype(torch.float32, scale=True),
+
     ])
 
     class DistillationDataset(torch.utils.data.Dataset):
@@ -126,12 +134,11 @@ def main(args):
 
             # Create teacher input (1024x1024 normalized)
             teacher_input = transform_teacher(image.copy())
-            
-            # Apply common transforms
-            image = transform_common(image)
 
             # Create student input (256x256 normalized)
-            student_input = transform_student(image.clone())
+            student_input = transform_student(image.copy())
+
+            label = transform_label(label.copy())
 
             return student_input, teacher_input, label
 
