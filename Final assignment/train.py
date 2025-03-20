@@ -200,7 +200,7 @@ def main(args):
             optimizer.zero_grad()
 
             with torch.no_grad():
-                teacher_outputs = teacher_model(**images_teacher)
+                teacher_outputs = teacher_model(images_teacher)
                 teacher_logits = teacher_outputs.logits
 
             student_logits = model(images_student)
