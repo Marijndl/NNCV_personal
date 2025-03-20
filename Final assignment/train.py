@@ -22,6 +22,7 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
 from torchvision.utils import make_grid
+from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR
 from torchvision.transforms.v2 import (
     Compose,
     Normalize,
@@ -143,6 +144,14 @@ def main(args):
 
     # Define the optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr)
+    # Define warmup function
+    def lr_lambda(epoch):
+        if epoch < 10:
+            return (epoch + 1) / 10  # Linear warmup
+        else:
+            return 1  # After warmup, let CosineAnnealing take over
+    warmup_scheduler = LambdaLR(optimizer, lr_lambda)
+    cosine_scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs - 10, eta_min=1e-6)
 
     # Training loop
     best_valid_loss = float('inf')
@@ -170,7 +179,13 @@ def main(args):
                 "learning_rate": optimizer.param_groups[0]['lr'],
                 "epoch": epoch + 1,
             }, step=epoch * len(train_dataloader) + i)
-            
+
+        # Step the scheduler
+        if epoch < 10:
+            warmup_scheduler.step()
+        else:
+            cosine_scheduler.step()
+
         # Validation
         model.eval()
         with torch.no_grad():
