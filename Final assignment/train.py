@@ -71,7 +71,7 @@ def get_args_parser():
     parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
     parser.add_argument("--T", type=int, default=2, help="Temperature for smoothing")
     parser.add_argument("--st-loss", type=int, default=0.25, help="Relative weight of soft target loss (teacher loss).")
-    parser.add_argument("--ce-loss", type=int, default=0.75, help="Relative weight of cross entropy loss (training loss).")
+    parser.add_argument("--ce-loss", type=int, default=1, help="Relative weight of cross entropy loss (training loss).")
 
     return parser
 
@@ -215,8 +215,8 @@ def main(args):
 
             student_logits = model(images_student)
 
-            soft_targets = nn.functional.softmax(teacher_logits / args.T, dim=-1)
-            soft_prob = nn.functional.log_softmax(student_logits / args.T, dim=-1)
+            soft_targets = nn.functional.softmax(teacher_logits / args.T, dim=1)
+            soft_prob = nn.functional.log_softmax(student_logits / args.T, dim=1)
 
             soft_targets_loss = torch.sum(soft_targets * (soft_targets.log() - soft_prob)) / soft_prob.size()[0] * (args.T**2)
             label_loss = criterion(student_logits, labels)
