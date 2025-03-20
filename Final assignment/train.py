@@ -199,7 +199,7 @@ def main(args):
 
         # Training
         model.train()
-        for images_student, images_teacher, labels in train_dataloader:
+        for i, (images_student, images_teacher, labels) in enumerate(train_dataloader):
             
             labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
             images_student, images_teacher, labels = images_student.to(device), images_teacher.to(device), labels.to(device)
