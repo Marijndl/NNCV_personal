@@ -121,7 +121,7 @@ def main(args):
     transform_label = Compose([
         ToImage(),
         Resize((256, 256), interpolation=InterpolationMode.NEAREST),
-        ToDtype(torch.float32, scale=True),
+        ToDtype(torch.uint8, scale=True),
 
     ])
 
@@ -134,6 +134,9 @@ def main(args):
 
             # Create teacher input (1024x1024 normalized)
             teacher_input = transform_teacher(image.copy())
+
+            # Apply common transforms
+            image = transform_common(image)
 
             # Create student input (256x256 normalized)
             student_input = transform_student(image.copy())
