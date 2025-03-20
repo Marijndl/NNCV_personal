@@ -123,7 +123,7 @@ def main(args):
             image, label = self.dataset[idx]
 
             # Create teacher input (1024x1024 normalized)
-            teacher_input = image.clone()
+            teacher_input = image.copy()
             
             # Apply common transforms
             image = transform_common(image)
