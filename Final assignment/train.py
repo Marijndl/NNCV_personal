@@ -191,10 +191,9 @@ def main(args):
         # Training
         model.train()
         for images_student, images_teacher, labels in train_dataloader:
-            images_student, images_teacher, labels = images_student.to(device), images_teacher.to(device), labels.to(device)
-
+            
             labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
-            images, labels = images.to(device), labels.to(device)
+            images_student, images_teacher, labels = images_student.to(device), images_teacher.to(device), labels.to(device)
 
             labels = labels.long().squeeze(1)  # Remove channel dimension
 
@@ -204,7 +203,7 @@ def main(args):
                 teacher_outputs = teacher_model(**images_teacher)
                 teacher_logits = teacher_outputs.logits
 
-            student_logits = model(images)
+            student_logits = model(images_student)
 
             soft_targets = nn.functional.softmax(teacher_logits / args.T, dim=-1)
             soft_prob = nn.functional.log_softmax(student_logits / args.T, dim=-1)
