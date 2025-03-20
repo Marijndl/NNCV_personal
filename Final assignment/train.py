@@ -23,6 +23,7 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
 from torchvision.utils import make_grid
 from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR
+from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
 from torchvision.transforms.v2 import (
     Compose,
     Normalize,
@@ -68,6 +69,9 @@ def get_args_parser():
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
+    parser.add_argument("--T", type=int, default=2, help="Temperature for smoothing")
+    parser.add_argument("--st-loss", type=int, default=0.25, help="Relative weight of soft target loss (teacher loss).")
+    parser.add_argument("--ce-loss", type=int, default=0.75, help="Relative weight of cross entropy loss (training loss).")
 
     return parser
 
@@ -139,6 +143,10 @@ def main(args):
         n_classes=19,  # 19 classes in the Cityscapes dataset
     ).to(device)
 
+    # Teacher model
+    feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b5-finetuned-cityscapes-1024-1024")
+    teacher_model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b5-finetuned-cityscapes-1024-1024")
+
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
 
@@ -169,8 +177,22 @@ def main(args):
             labels = labels.long().squeeze(1)  # Remove channel dimension
 
             optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
+
+            with torch.no_grad():
+                teacher_inputs = feature_extractor(images=images, return_tensors="pt", image_mean=(0.2869, 0.3251, 0.2839), image_std=(0.1869, 0.1901, 0.1872))
+                teacher_outputs = teacher_model(**teacher_inputs)
+                teacher_logits = teacher_outputs.logits
+
+            student_logits = model(images)
+
+            soft_targets = nn.functional.softmax(teacher_logits / args.T, dim=-1)
+            soft_prob = nn.functional.log_softmax(student_logits / args.T, dim=-1)
+
+            soft_targets_loss = torch.sum(soft_targets * (soft_targets.log() - soft_prob)) / soft_prob.size()[0] * (T**2)
+            label_loss = criterion(outputs, labels)
+
+            loss = args.st_loss * soft_targets_loss + args.ce_loss * label_loss
+            
             loss.backward()
             optimizer.step()
 
