@@ -202,7 +202,7 @@ def main(args):
             optimizer.zero_grad()
 
             with torch.no_grad():
-                inputs = feature_extractor(images=images_teacher, return_tensors="pt")
+                inputs = feature_extractor(images=images_teacher, return_tensors="pt").to(device)
                 teacher_outputs = teacher_model(**inputs)
                 teacher_logits = teacher_outputs.logits
 
