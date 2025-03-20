@@ -121,12 +121,12 @@ def main(args):
         
         def __getitem__(self, idx):
             image, label = self.dataset[idx]
+
+            # Create teacher input (1024x1024 normalized)
+            teacher_input = image.clone()
             
             # Apply common transforms
             image = transform_common(image)
-
-            # Create teacher input (1024x1024 normalized)
-            teacher_input = transform_teacher(image.clone())
 
             # Create student input (256x256 normalized)
             student_input = transform_student(image.clone())
@@ -200,7 +200,8 @@ def main(args):
             optimizer.zero_grad()
 
             with torch.no_grad():
-                teacher_outputs = teacher_model(images_teacher)
+                inputs = feature_extractor(images=images_teacher, return_tensors="pt")
+                teacher_outputs = teacher_model(**inputs)
                 teacher_logits = teacher_outputs.logits
 
             student_logits = model(images_student)
