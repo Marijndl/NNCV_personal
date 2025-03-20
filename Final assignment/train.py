@@ -106,7 +106,9 @@ def main(args):
 
     # Teacher-specific normalization
     transform_teacher = Compose([
-        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)), 
+        ToImage(),
+        Resize((1024, 1024), interpolation=InterpolationMode.BILINEAR),
+        ToDtype(torch.float32, scale=True),
     ])
 
     # Student-specific normalization and downscaling
@@ -123,7 +125,7 @@ def main(args):
             image, label = self.dataset[idx]
 
             # Create teacher input (1024x1024 normalized)
-            teacher_input = image.copy()
+            teacher_input = transform_teacher(image.copy())
             
             # Apply common transforms
             image = transform_common(image)
