@@ -98,7 +98,7 @@ def main(args):
         ToImage(),
         Resize((256, 256), interpolation=InterpolationMode.BILINEAR),
         ToDtype(torch.float32, scale=True),
-        Normalize((0.2854, 0.3227, 0.2819), (0.04797, 0.04296, 0.04188)),
+        Normalize((0.2869, 0.3251, 0.2839), (0.1869, 0.1901, 0.1872)),
     ])
     
     # Load the dataset and make a split for training and validation
