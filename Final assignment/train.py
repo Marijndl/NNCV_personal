@@ -97,44 +97,65 @@ def main(args):
     # Define the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Define the transforms to apply to the images
-    transform = Compose([
+    # Define common transforms (resize to 1024 first, then resize for student)
+    transform_common = Compose([
         ToImage(),
-        Resize((256, 256), interpolation=InterpolationMode.BILINEAR),
+        Resize((1024, 1024), interpolation=InterpolationMode.BILINEAR),
         ToDtype(torch.float32, scale=True),
+    ])
+
+    # Teacher-specific normalization
+    transform_teacher = Compose([
+        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)), 
+    ])
+
+    # Student-specific normalization and downscaling
+    transform_student = Compose([
+        Resize((256, 256), interpolation=InterpolationMode.BILINEAR),
         Normalize((0.2869, 0.3251, 0.2839), (0.1869, 0.1901, 0.1872)),
     ])
+
+    class DistillationDataset(torch.utils.data.Dataset):
+        def __init__(self, dataset):
+            self.dataset = dataset
+        
+        def __getitem__(self, idx):
+            image, label = self.dataset[idx]
+            
+            # Apply common transforms
+            image = transform_common(image)
+
+            # Create teacher input (1024x1024 normalized)
+            teacher_input = transform_teacher(image.clone())
+
+            # Create student input (256x256 normalized)
+            student_input = transform_student(image.clone())
+
+            return student_input, teacher_input, label
+
+        def __len__(self):
+            return len(self.dataset)
+
     
-    # Load the dataset and make a split for training and validation
-    train_dataset = Cityscapes(
-        args.data_dir, 
-        split="train", 
-        mode="fine", 
-        target_type="semantic", 
-        transforms=transform,
-    )
-    valid_dataset = Cityscapes(
-        args.data_dir, 
-        split="val", 
-        mode="fine", 
-        target_type="semantic", 
-        transforms=transform,
+    # Load raw dataset
+    raw_train_dataset = Cityscapes(
+        args.data_dir, split="train", mode="fine", target_type="semantic"
     )
 
-    train_dataset = wrap_dataset_for_transforms_v2(train_dataset)
-    valid_dataset = wrap_dataset_for_transforms_v2(valid_dataset)
+    raw_valid_dataset = Cityscapes(
+        args.data_dir, split="val", mode="fine", target_type="semantic"
+    )
+
+    # Ensure compatibility with transform handling
+    train_dataset = wrap_dataset_for_transforms_v2(DistillationDataset(raw_train_dataset))
+    valid_dataset = wrap_dataset_for_transforms_v2(DistillationDataset(raw_valid_dataset))
 
     train_dataloader = DataLoader(
-        train_dataset, 
-        batch_size=args.batch_size, 
-        shuffle=True,
-        num_workers=args.num_workers
+        train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers
     )
+
     valid_dataloader = DataLoader(
-        valid_dataset, 
-        batch_size=args.batch_size, 
-        shuffle=False,
-        num_workers=args.num_workers
+        valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers
     )
 
     # Define the model
@@ -169,7 +190,8 @@ def main(args):
 
         # Training
         model.train()
-        for i, (images, labels) in enumerate(train_dataloader):
+        for images_student, images_teacher, labels in train_dataloader:
+            images_student, images_teacher, labels = images_student.to(device), images_teacher.to(device), labels.to(device)
 
             labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
             images, labels = images.to(device), labels.to(device)
@@ -179,8 +201,7 @@ def main(args):
             optimizer.zero_grad()
 
             with torch.no_grad():
-                teacher_inputs = feature_extractor(images=images, return_tensors="pt", image_mean=(0.2869, 0.3251, 0.2839), image_std=(0.1869, 0.1901, 0.1872))
-                teacher_outputs = teacher_model(**teacher_inputs)
+                teacher_outputs = teacher_model(**images_teacher)
                 teacher_logits = teacher_outputs.logits
 
             student_logits = model(images)
@@ -213,7 +234,7 @@ def main(args):
         with torch.no_grad():
             losses = []
             dice_scores = []
-            for i, (images, labels) in enumerate(valid_dataloader):
+            for i, (images, _, labels) in enumerate(valid_dataloader):
 
                 labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
                 images, labels = images.to(device), labels.to(device)
