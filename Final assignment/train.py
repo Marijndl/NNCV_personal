@@ -211,7 +211,7 @@ def main(args):
             soft_targets = nn.functional.softmax(teacher_logits / args.T, dim=-1)
             soft_prob = nn.functional.log_softmax(student_logits / args.T, dim=-1)
 
-            soft_targets_loss = torch.sum(soft_targets * (soft_targets.log() - soft_prob)) / soft_prob.size()[0] * (T**2)
+            soft_targets_loss = torch.sum(soft_targets * (soft_targets.log() - soft_prob)) / soft_prob.size()[0] * (args.T**2)
             label_loss = criterion(outputs, labels)
 
             loss = args.st_loss * soft_targets_loss + args.ce_loss * label_loss
