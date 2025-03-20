@@ -147,8 +147,8 @@ def main(args):
     )
 
     # Ensure compatibility with transform handling
-    train_dataset = wrap_dataset_for_transforms_v2(DistillationDataset(raw_train_dataset))
-    valid_dataset = wrap_dataset_for_transforms_v2(DistillationDataset(raw_valid_dataset))
+    train_dataset = DistillationDataset(wrap_dataset_for_transforms_v2(raw_train_dataset))
+    valid_dataset = DistillationDataset(wrap_dataset_for_transforms_v2(raw_valid_dataset))
 
     train_dataloader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers
