@@ -72,7 +72,7 @@ def get_args_parser():
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
     parser.add_argument("--T", type=int, default=2, help="Temperature for smoothing")
-    parser.add_argument("--st-loss", type=float, default=0.25, help="Relative weight of soft target loss (teacher loss).")
+    parser.add_argument("--st-loss", type=float, default=0.5, help="Relative weight of soft target loss (teacher loss).")
     parser.add_argument("--ce-loss", type=float, default=1, help="Relative weight of cross entropy loss (training loss).")
 
     return parser
