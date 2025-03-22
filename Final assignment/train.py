@@ -31,6 +31,8 @@ from torchvision.transforms.v2 import (
     ToImage,
     ToDtype,
     InterpolationMode,
+    RandomHorizontalFlip,
+    RandomResizedCrop
 )
 from utils import * 
 
@@ -100,6 +102,8 @@ def main(args):
     # Define common transforms (resize to 1024 first, then resize for student)
     transform_common = Compose([
         ToImage(),
+        RandomResizedCrop(size=(768, 768), scale=(0.4, 0.8), antialias=True),
+        RandomHorizontalFlip(p=0.5),
         
         # Resize((768, 768), interpolation=InterpolationMode.BILINEAR),
         ToDtype(torch.float32, scale=True),
@@ -108,7 +112,7 @@ def main(args):
     # Teacher-specific normalization
     transform_teacher = Compose([
         ToImage(),
-        Resize((768, 768), interpolation=InterpolationMode.BILINEAR),
+        # Resize((768, 768), interpolation=InterpolationMode.BILINEAR),
         ToDtype(torch.float32, scale=True),
     ])
 
