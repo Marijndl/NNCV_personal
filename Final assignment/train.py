@@ -100,26 +100,27 @@ def main(args):
     # Define common transforms (resize to 1024 first, then resize for student)
     transform_common = Compose([
         ToImage(),
-        Resize((1024, 1024), interpolation=InterpolationMode.BILINEAR),
+        
+        # Resize((768, 768), interpolation=InterpolationMode.BILINEAR),
         ToDtype(torch.float32, scale=True),
     ])
 
     # Teacher-specific normalization
     transform_teacher = Compose([
         ToImage(),
-        Resize((1024, 1024), interpolation=InterpolationMode.BILINEAR),
+        Resize((768, 768), interpolation=InterpolationMode.BILINEAR),
         ToDtype(torch.float32, scale=True),
     ])
 
     # Student-specific normalization and downscaling
     transform_student = Compose([
-        Resize((256, 256), interpolation=InterpolationMode.BILINEAR),
+        Resize((384, 384), interpolation=InterpolationMode.BILINEAR),
         Normalize((0.2869, 0.3251, 0.2839), (0.1869, 0.1901, 0.1872)),
     ])
 
     transform_label = Compose([
         ToImage(),
-        Resize((256, 256), interpolation=InterpolationMode.BILINEAR),
+        Resize((384, 384), interpolation=InterpolationMode.BILINEAR),
         ToDtype(torch.uint8, scale=True),
     ])
 
@@ -130,14 +131,16 @@ def main(args):
         def __getitem__(self, idx):
             image, label = self.dataset[idx]
 
+            # Add data augmentation
+            image = transform_common(image)
+
             # Create teacher input (1024x1024 normalized)
-            teacher_input = transform_teacher(image.copy())
+            teacher_input = transform_teacher(image.clone())
             
             # Apply common transforms
-            image = transform_common(image)
             label = transform_label(label)
 
-            # Create student input (256x256 normalized)
+            # Create student input (384x384 normalized)
             student_input = transform_student(image.clone())
 
             return student_input, teacher_input, label
@@ -174,9 +177,9 @@ def main(args):
     ).to(device)
 
     # Teacher model
-    feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b5-finetuned-cityscapes-1024-1024")
-    teacher_model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b5-finetuned-cityscapes-1024-1024").to(device)
-
+    feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-cityscapes-768-768")
+    teacher_model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-cityscapes-768-768").to(device)
+    
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
 
