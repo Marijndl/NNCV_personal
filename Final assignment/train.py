@@ -118,13 +118,13 @@ def main(args):
 
     # Student-specific normalization and downscaling
     transform_student = Compose([
-        Resize((192, 192), interpolation=InterpolationMode.BILINEAR),
+        Resize((128, 128), interpolation=InterpolationMode.BILINEAR),
         Normalize((0.2869, 0.3251, 0.2839), (0.1869, 0.1901, 0.1872)),
     ])
 
     transform_label = Compose([
         ToImage(),
-        Resize((192, 192), interpolation=InterpolationMode.BILINEAR),
+        Resize((128, 128), interpolation=InterpolationMode.BILINEAR),
         ToDtype(torch.uint8, scale=True),
     ])
 
@@ -144,7 +144,7 @@ def main(args):
             # Apply common transforms
             label = transform_label(label)
 
-            # Create student input (192x192 normalized)
+            # Create student input (128x128 normalized)
             student_input = transform_student(image.clone())
 
             return student_input, teacher_input, label
