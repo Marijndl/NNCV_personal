@@ -22,6 +22,7 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
 from torchvision.utils import make_grid
+from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR
 from torchvision.transforms.v2 import (
     Compose,
     Normalize,
@@ -61,8 +62,8 @@ def convert_train_id_to_color(prediction: torch.Tensor) -> torch.Tensor:
 def get_args_parser():
 
     parser = ArgumentParser("Training script for a PyTorch U-Net model")
-    parser.add_argument("--data-dir", type=str, default="D:\cityscapes", help="Path to the training data")
-    parser.add_argument("--batch-size", type=int, default=2, help="Training batch size")
+    parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
+    parser.add_argument("--batch-size", type=int, default=32, help="Training batch size")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
@@ -143,6 +144,21 @@ def main(args):
     # Define the optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr)
 
+    # Compute total number of training steps
+    total_steps = args.epochs * len(train_dataloader)  # total training steps
+    warmup_steps = 10 * len(train_dataloader)  # warmup lasts for 10 epochs worth of steps
+
+    # Define warmup function based on batch step
+    def lr_lambda(current_step):
+        if current_step < warmup_steps:
+            return (current_step + 1) / warmup_steps  # Linear warmup
+        else:
+            return 1  # After warmup, let CosineAnnealing take over
+
+    warmup_scheduler = LambdaLR(optimizer, lr_lambda)
+    cosine_scheduler = CosineAnnealingLR(optimizer, T_max=total_steps - warmup_steps, eta_min=1e-6)
+
+
     # Training loop
     best_valid_loss = float('inf')
     current_best_model_path = None
@@ -164,6 +180,12 @@ def main(args):
             loss.backward()
             optimizer.step()
             print(loss.detach().item())
+
+            # Step the scheduler
+            if epoch < 10:
+                warmup_scheduler.step()
+            else:
+                cosine_scheduler.step()
 
             wandb.log({
                 "train_loss": loss.item(),
