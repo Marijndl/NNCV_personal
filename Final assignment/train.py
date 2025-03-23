@@ -181,6 +181,9 @@ def main(args):
         n_classes=19,  # 19 classes in the Cityscapes dataset
     ).to(device)
 
+    # Load weights
+    model.load_state_dict(torch.load("checkpoints/unet-training/best_model-epoch=0040-val_loss=0.28507426008582115.pth", weights_only=True))
+
     # Teacher model
     feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b5-finetuned-cityscapes-1024-1024")
     teacher_model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b5-finetuned-cityscapes-1024-1024").to(device)
