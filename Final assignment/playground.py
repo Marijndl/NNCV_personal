@@ -17,15 +17,15 @@ from torchvision.transforms.v2 import (
 )
 
 from unet import UNet
-from vltseg.models.eva02 import EVA02
+import segmentation_models_pytorch as smp
+
 
 # Define the device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-# Load pretrained weights
-teacher_model = EVA02().to(device)
-checkpoint = torch.load('vltseg_checkpoint_mapillary+cityscapes_2.pth')
-teacher_model.load_state_dict(checkpoint['model_state_dict'])
-teacher_model.eval()  # Set the model to evaluation mode
+model = smp.DeepLabV3Plus(encoder_name='resnet34', encoder_weights='imagenet', classes=19)
 
+preprocessing = smp.encoders.get_preprocessing_fn(encoder_name='resnet34', pretrained='imagenet')
+
+print(preprocessing)

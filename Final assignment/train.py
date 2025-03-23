@@ -33,6 +33,7 @@ from torchvision.transforms.v2 import (
 from utils import * 
 
 from unet import UNet
+import segmentation_models_pytorch as smp
 
 
 # Mapping class IDs to train IDs
@@ -60,8 +61,8 @@ def convert_train_id_to_color(prediction: torch.Tensor) -> torch.Tensor:
 def get_args_parser():
 
     parser = ArgumentParser("Training script for a PyTorch U-Net model")
-    parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
-    parser.add_argument("--batch-size", type=int, default=64, help="Training batch size")
+    parser.add_argument("--data-dir", type=str, default="D:\cityscapes", help="Path to the training data")
+    parser.add_argument("--batch-size", type=int, default=2, help="Training batch size")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
@@ -91,13 +92,14 @@ def main(args):
 
     # Define the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
     # Define the transforms to apply to the images
     transform = Compose([
         ToImage(),
-        Resize((256, 256), interpolation=InterpolationMode.BILINEAR),
+        Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
         ToDtype(torch.float32, scale=True),
-        Normalize((0.2854, 0.3227, 0.2819), (0.04797, 0.04296, 0.04188)),
+        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
     
     # Load the dataset and make a split for training and validation
@@ -133,10 +135,7 @@ def main(args):
     )
 
     # Define the model
-    model = UNet(
-        in_channels=3,  # RGB images
-        n_classes=19,  # 19 classes in the Cityscapes dataset
-    ).to(device)
+    model = smp.DeepLabV3Plus(encoder_name='resnet34', encoder_weights='imagenet', classes=19, encoder_depth=5, encoder_output_stride=8).to(device)
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
@@ -164,6 +163,7 @@ def main(args):
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+            print(loss.detach().item())
 
             wandb.log({
                 "train_loss": loss.item(),
