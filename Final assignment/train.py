@@ -107,7 +107,7 @@ def main(args):
 
     transform_val = Compose([
         ToImage(),
-        CenterCrop(512),
+        Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
         ToDtype(torch.float32, scale=True),
         Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
@@ -145,7 +145,7 @@ def main(args):
     )
 
     # Define the model
-    model = smp.DeepLabV3Plus(encoder_name='resnet101', encoder_weights='imagenet', classes=19, encoder_depth=5, encoder_output_stride=8).to(device)
+    model = smp.DeepLabV3Plus(encoder_name='resnet152', encoder_weights='imagenet', classes=19, encoder_depth=5, encoder_output_stride=8).to(device)
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
