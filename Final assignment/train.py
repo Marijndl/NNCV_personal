@@ -30,6 +30,8 @@ from torchvision.transforms.v2 import (
     ToImage,
     ToDtype,
     InterpolationMode,
+    RandomCrop,
+    CenterCrop
 )
 from utils import * 
 
@@ -96,9 +98,16 @@ def main(args):
     print(f"Using device: {device}")
 
     # Define the transforms to apply to the images
-    transform = Compose([
+    transform_train = Compose([
         ToImage(),
-        Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
+        RandomCrop(512),
+        ToDtype(torch.float32, scale=True),
+        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+    ])
+
+    transform_val = Compose([
+        ToImage(),
+        CenterCrop(512),
         ToDtype(torch.float32, scale=True),
         Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
@@ -109,14 +118,14 @@ def main(args):
         split="train", 
         mode="fine", 
         target_type="semantic", 
-        transforms=transform,
+        transforms=transform_train,
     )
     valid_dataset = Cityscapes(
         args.data_dir, 
         split="val", 
         mode="fine", 
         target_type="semantic", 
-        transforms=transform,
+        transforms=transform_val,
     )
 
     train_dataset = wrap_dataset_for_transforms_v2(train_dataset)
