@@ -136,7 +136,7 @@ def main(args):
     )
 
     # Define the model
-    model = smp.DeepLabV3Plus(encoder_name='resnet34', encoder_weights='imagenet', classes=19, encoder_depth=5, encoder_output_stride=8).to(device)
+    model = smp.DeepLabV3Plus(encoder_name='resnet101', encoder_weights='imagenet', classes=19, encoder_depth=5, encoder_output_stride=8).to(device)
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
@@ -156,7 +156,7 @@ def main(args):
             return 1  # After warmup, let CosineAnnealing take over
 
     warmup_scheduler = LambdaLR(optimizer, lr_lambda)
-    cosine_scheduler = CosineAnnealingLR(optimizer, T_max=total_steps - warmup_steps, eta_min=1e-6)
+    cosine_scheduler = CosineAnnealingLR(optimizer, T_max=total_steps - 2 * warmup_steps, eta_min=1e-6)
 
 
     # Training loop
@@ -184,6 +184,8 @@ def main(args):
             # Step the scheduler
             if epoch < 10:
                 warmup_scheduler.step()
+            elif epoch < 20:
+                pass
             else:
                 cosine_scheduler.step()
 
