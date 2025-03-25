@@ -31,7 +31,9 @@ from torchvision.transforms.v2 import (
     ToDtype,
     InterpolationMode,
     RandomCrop,
-    CenterCrop
+    CenterCrop,
+    RandomHorizontalFlip,
+
 )
 from utils import * 
 
@@ -100,14 +102,15 @@ def main(args):
     # Define the transforms to apply to the images
     transform_train = Compose([
         ToImage(),
-        RandomCrop(512),
+        Resize((512, 1024), interpolation=InterpolationMode.BILINEAR, antialias=True),
+        RandomHorizontalFlip(0.5),
         ToDtype(torch.float32, scale=True),
         Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
 
     transform_val = Compose([
         ToImage(),
-        Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
+        Resize((512, 1024), interpolation=InterpolationMode.BILINEAR, antialias=True),
         ToDtype(torch.float32, scale=True),
         Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
@@ -145,10 +148,11 @@ def main(args):
     )
 
     # Define the model
-    model = smp.DeepLabV3Plus(encoder_name='resnet152', encoder_weights='imagenet', classes=19, encoder_depth=5, encoder_output_stride=8).to(device)
+    model = smp.DeepLabV3Plus(encoder_name='resnet101', encoder_weights='imagenet', classes=19, encoder_depth=5, encoder_output_stride=8).to(device)
 
     # Define the loss function
-    criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
+    criterion_extra = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
+    criterion = smp.losses.DiceLoss(mode='multiclass', ignore_index=255)
 
     # Define the optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr)
@@ -165,7 +169,7 @@ def main(args):
             return 1  # After warmup, let CosineAnnealing take over
 
     warmup_scheduler = LambdaLR(optimizer, lr_lambda)
-    cosine_scheduler = CosineAnnealingLR(optimizer, T_max=total_steps - 2 * warmup_steps, eta_min=1e-6)
+    cosine_scheduler = CosineAnnealingLR(optimizer, T_max=total_steps - 3 * warmup_steps, eta_min=1e-6)
 
 
     # Training loop
@@ -186,6 +190,7 @@ def main(args):
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
+            loss_extra = criterion_extra(outputs, labels)
             loss.backward()
             optimizer.step()
             print(loss.detach().item())
@@ -193,13 +198,14 @@ def main(args):
             # Step the scheduler
             if epoch < 10:
                 warmup_scheduler.step()
-            elif epoch < 20:
+            elif epoch < 30:
                 pass
             else:
                 cosine_scheduler.step()
 
             wandb.log({
-                "train_loss": loss.item(),
+                "train_loss": loss_extra.item(),
+                "train_DICE_loss": loss.item(),
                 "learning_rate": optimizer.param_groups[0]['lr'],
                 "epoch": epoch + 1,
             }, step=epoch * len(train_dataloader) + i)
@@ -208,6 +214,7 @@ def main(args):
         model.eval()
         with torch.no_grad():
             losses = []
+            losses_extra = []
             dice_scores = []
             for i, (images, labels) in enumerate(valid_dataloader):
 
@@ -218,8 +225,11 @@ def main(args):
 
                 outputs = model(images)
                 loss = criterion(outputs, labels)
+                loss_extra = criterion_extra(outputs, labels)
+
                 dice = dice_score(outputs, labels)
                 losses.append(loss.item())
+                losses_extra.append(loss_extra.item())
                 dice_scores.append(dice)
             
                 if i == 0:
@@ -243,9 +253,12 @@ def main(args):
                     }, step=(epoch + 1) * len(train_dataloader) - 1)
             
             valid_loss = sum(losses) / len(losses)
+            valid_loss_extra = sum(losses_extra) / len(losses_extra)
+
             valid_dice = sum(dice_scores) / len(dice_scores)
             wandb.log({
-                "valid_loss": valid_loss,
+                "valid_loss": valid_loss_extra,
+                "valid_DICE_loss": valid_loss,
                 "valid_dice_score": valid_dice,
             }, step=(epoch + 1) * len(train_dataloader) - 1)
 
