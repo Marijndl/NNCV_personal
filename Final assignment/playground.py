@@ -24,8 +24,8 @@ import segmentation_models_pytorch as smp
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-model = smp.DeepLabV3Plus(encoder_name='resnet34', encoder_weights='imagenet', classes=19)
+model = smp.Unet('resnet34', encoder_weights='imagenet')
 
-preprocessing = smp.encoders.get_preprocessing_fn(encoder_name='resnet34', pretrained='imagenet')
+# After training your model, save it to a directory
+model.save_pretrained('./my_model')
 
-print(preprocessing)

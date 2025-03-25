@@ -22,7 +22,7 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
 from torchvision.utils import make_grid
-from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR
+from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR, OneCycleLR
 from torchvision.transforms.v2 import (
     Compose,
     Normalize,
@@ -40,6 +40,9 @@ from utils import *
 from unet import UNet
 import segmentation_models_pytorch as smp
 
+
+saved_models = []
+max_saved_models = 3  # Keep last 3 best models
 
 # Mapping class IDs to train IDs
 id_to_trainid = {cls.id: cls.train_id for cls in Cityscapes.classes}
@@ -102,15 +105,15 @@ def main(args):
     # Define the transforms to apply to the images
     transform_train = Compose([
         ToImage(),
-        Resize((512, 1024), interpolation=InterpolationMode.BILINEAR, antialias=True),
         RandomHorizontalFlip(0.5),
+        Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
         ToDtype(torch.float32, scale=True),
         Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
 
     transform_val = Compose([
         ToImage(),
-        Resize((512, 1024), interpolation=InterpolationMode.BILINEAR, antialias=True),
+        Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
         ToDtype(torch.float32, scale=True),
         Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
@@ -138,13 +141,15 @@ def main(args):
         train_dataset, 
         batch_size=args.batch_size, 
         shuffle=True,
-        num_workers=args.num_workers
+        num_workers=args.num_workers,
+        pin_memory=True, persistent_workers=True
     )
     valid_dataloader = DataLoader(
         valid_dataset, 
         batch_size=args.batch_size, 
         shuffle=False,
-        num_workers=args.num_workers
+        num_workers=args.num_workers,
+        pin_memory=True, persistent_workers=True
     )
 
     # Define the model
@@ -155,21 +160,20 @@ def main(args):
     criterion = smp.losses.DiceLoss(mode='multiclass', ignore_index=255)
 
     # Define the optimizer
-    optimizer = AdamW(model.parameters(), lr=args.lr)
+    optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
-    # Compute total number of training steps
-    total_steps = args.epochs * len(train_dataloader)  # total training steps
-    warmup_steps = 10 * len(train_dataloader)  # warmup lasts for 10 epochs worth of steps
+    # Compute total training steps
+    total_steps = args.epochs * len(train_dataloader)
 
-    # Define warmup function based on batch step
-    def lr_lambda(current_step):
-        if current_step < warmup_steps:
-            return (current_step + 1) / warmup_steps  # Linear warmup
-        else:
-            return 1  # After warmup, let CosineAnnealing take over
-
-    warmup_scheduler = LambdaLR(optimizer, lr_lambda)
-    cosine_scheduler = CosineAnnealingLR(optimizer, T_max=total_steps - 3 * warmup_steps, eta_min=1e-6)
+    # Define OneCycleLR scheduler
+    scheduler = OneCycleLR(
+        optimizer, 
+        max_lr=args.lr,         # Peak learning rate
+        total_steps=total_steps, 
+        pct_start=0.1,          # Warm-up for first 10% of training
+        anneal_strategy='cos',  # Cosine annealing after warmup
+        final_div_factor=1000   # Final LR is 1000x smaller than max LR
+    )
 
 
     # Training loop
@@ -195,13 +199,8 @@ def main(args):
             optimizer.step()
             print(loss.detach().item())
 
-            # Step the scheduler
-            if epoch < 10:
-                warmup_scheduler.step()
-            elif epoch < 30:
-                pass
-            else:
-                cosine_scheduler.step()
+            # Step OneCycleLR scheduler
+            scheduler.step()
 
             wandb.log({
                 "train_loss": loss_extra.item(),
@@ -264,13 +263,12 @@ def main(args):
 
             if valid_loss < best_valid_loss:
                 best_valid_loss = valid_loss
-                if current_best_model_path:
-                    os.remove(current_best_model_path)
-                current_best_model_path = os.path.join(
-                    output_dir, 
-                    f"best_model-epoch={epoch:04}-val_loss={valid_loss:04}.pth"
-                )
-                torch.save(model.state_dict(), current_best_model_path)
+                model_path = os.path.join(output_dir, f"best_model-epoch={epoch:04}-val_loss={valid_loss:.4f}.pth")
+                torch.save(model.state_dict(), model_path)
+                saved_models.append(model_path)
+
+                if len(saved_models) > max_saved_models:
+                    os.remove(saved_models.pop(0))  # Remove the oldest model
         
     print("Training complete!")
 
