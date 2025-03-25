@@ -191,7 +191,7 @@ def main(args):
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss_extra = criterion_extra(outputs, labels)
-            loss.backward()
+            loss_extra.backward()
             optimizer.step()
             print(loss.detach().item())
 
