@@ -156,8 +156,8 @@ def main(args):
     model = smp.DeepLabV3Plus(encoder_name='resnet101', encoder_weights='imagenet', classes=19, encoder_depth=5, encoder_output_stride=8).to(device)
 
     # Define the loss function
-    criterion = nn.CrossEntropyLoss(ignore_index=255, label_smoothing=0.1)  # Ignore the void class
-    criterion_dice = smp.losses.DiceLoss(mode='multiclass', ignore_index=255)
+    criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
+    # criterion_dice = smp.losses.DiceLoss(mode='multiclass', ignore_index=255)
 
     # Define the optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
@@ -193,7 +193,7 @@ def main(args):
 
             optimizer.zero_grad()
             outputs = model(images)
-            loss_dice = criterion_dice(outputs, labels)
+            # loss_dice = criterion_dice(outputs, labels)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -212,7 +212,7 @@ def main(args):
         # Validation
         model.eval()
         with torch.no_grad():
-            losses_dice = []
+            # losses_dice = []
             losses = []
             dice_scores = []
             for i, (images, labels) in enumerate(valid_dataloader):
@@ -223,11 +223,11 @@ def main(args):
                 labels = labels.long().squeeze(1)  # Remove channel dimension
 
                 outputs = model(images)
-                loss_dice = criterion_dice(outputs, labels)
+                # loss_dice = criterion_dice(outputs, labels)
                 loss = criterion(outputs, labels)
 
                 dice = dice_score(outputs, labels)
-                losses_dice.append(loss_dice.item())
+                # losses_dice.append(loss_dice.item())
                 losses.append(loss.item())
                 dice_scores.append(dice)
             
@@ -251,19 +251,19 @@ def main(args):
                         "labels": [wandb.Image(labels_img)],
                     }, step=(epoch + 1) * len(train_dataloader) - 1)
             
-            valid_loss_dice = sum(losses_dice) / len(losses_dice)
+            # valid_loss_dice = sum(losses_dice) / len(losses_dice)
             valid_loss = sum(losses) / len(losses)
 
             valid_dice = sum(dice_scores) / len(dice_scores)
             wandb.log({
                 "valid_loss": valid_loss,
-                "valid_DICE_loss": valid_loss_dice,
+                # "valid_DICE_loss": valid_loss_dice,
                 "valid_dice_score": valid_dice,
             }, step=(epoch + 1) * len(train_dataloader) - 1)
 
-            if valid_loss_dice < best_valid_loss:
-                best_valid_loss = valid_loss_dice
-                model_path = os.path.join(output_dir, f"best_model-epoch={epoch:04}-val_loss={valid_loss_dice:.4f}.pth")
+            if valid_loss < best_valid_loss:
+                best_valid_loss = valid_loss
+                model_path = os.path.join(output_dir, f"best_model-epoch={epoch:04}-val_loss={valid_loss:.4f}.pth")
                 torch.save(model.state_dict(), model_path)
                 saved_models.append(model_path)
 
@@ -277,7 +277,7 @@ def main(args):
         model.state_dict(),
         os.path.join(
             output_dir,
-            f"final_model-epoch={epoch:04}-val_loss={valid_loss_dice:04}.pth"
+            f"final_model-epoch={epoch:04}-val_loss={valid_loss:04}.pth"
         )
     )
     wandb.finish()
