@@ -106,6 +106,7 @@ def main(args):
     transform_train = Compose([
         ToImage(),
         RandomHorizontalFlip(0.5),
+        # RandomCrop((512, 1024)),  # Crop to focus on smaller details
         Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
         ToDtype(torch.float32, scale=True),
         Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
@@ -153,7 +154,22 @@ def main(args):
     )
 
     # Define the model
-    model = smp.DeepLabV3Plus(encoder_name='resnet101', encoder_weights='imagenet', classes=19, encoder_depth=5, encoder_output_stride=8).to(device)
+    model = smp.DeepLabV3Plus(
+        encoder_name="ResNeSt101e",  
+        encoder_weights="imagenet",  
+        encoder_output_stride=8,  
+        decoder_channels=512,  
+        decoder_atrous_rates=(6, 12, 18),  
+        in_channels=3,  
+        classes=19,  
+        activation=None,  
+        aux_params=dict(
+            pooling="avg",  
+            dropout=0.2,  
+            activation="softmax",  
+            classes=19  
+        )
+    ).to(device)
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
