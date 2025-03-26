@@ -197,14 +197,14 @@ def main(args):
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            print(loss_dice.detach().item())
+            print(loss.detach().item())
 
             # Step OneCycleLR scheduler
             scheduler.step()
 
             wandb.log({
                 "train_loss": loss.item(),
-                "train_DICE_loss": loss_dice.item(),
+                # "train_DICE_loss": loss_dice.item(),
                 "learning_rate": optimizer.param_groups[0]['lr'],
                 "epoch": epoch + 1,
             }, step=epoch * len(train_dataloader) + i)
