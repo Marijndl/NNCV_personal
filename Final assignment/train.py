@@ -23,6 +23,7 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
 from torchvision.utils import make_grid
 from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR, OneCycleLR
+from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 from torchvision.transforms.v2 import (
     Compose,
     Normalize,
@@ -157,7 +158,7 @@ def main(args):
     model = smp.DeepLabV3Plus(
         encoder_name="timm-resnest101e",  
         encoder_weights="imagenet",  
-        encoder_output_stride=8,  
+        encoder_output_stride=4,  
         decoder_channels=512,  
         decoder_atrous_rates=(6, 12, 18),  
         in_channels=3,  
@@ -172,7 +173,7 @@ def main(args):
     ).to(device)
 
     # Define the loss function
-    criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
+    criterion = FocalLoss(mode='multiclass', ignore_index=255)  # Ignore the void class
     # criterion_dice = smp.losses.DiceLoss(mode='multiclass', ignore_index=255)
 
     # Define the optimizer
@@ -182,15 +183,7 @@ def main(args):
     total_steps = args.epochs * len(train_dataloader)
 
     # Define OneCycleLR scheduler
-    scheduler = OneCycleLR(
-        optimizer, 
-        max_lr=args.lr,         # Peak learning rate
-        total_steps=total_steps, 
-        pct_start=0.1,          # Warm-up for first 10% of training
-        anneal_strategy='cos',  # Cosine annealing after warmup
-        final_div_factor=1000   # Final LR is 1000x smaller than max LR
-    )
-
+    scheduler = OneCycleLR(optimizer, max_lr=args.lr, total_steps=int(1.5 * total_steps), pct_start=0.2)
 
     # Training loop
     best_valid_loss = float('inf')
