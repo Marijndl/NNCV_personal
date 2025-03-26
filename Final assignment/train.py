@@ -155,7 +155,7 @@ def main(args):
 
     # Define the model
     model = smp.DeepLabV3Plus(
-        encoder_name="ResNeSt101e",  
+        encoder_name="timm-resnest101e",  
         encoder_weights="imagenet",  
         encoder_output_stride=8,  
         decoder_channels=512,  
