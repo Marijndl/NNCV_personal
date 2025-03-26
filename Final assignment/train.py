@@ -142,14 +142,14 @@ def main(args):
         batch_size=args.batch_size, 
         shuffle=True,
         num_workers=args.num_workers,
-        pin_memory=True, persistent_workers=True
+        # pin_memory=True, persistent_workers=True
     )
     valid_dataloader = DataLoader(
         valid_dataset, 
         batch_size=args.batch_size, 
         shuffle=False,
         num_workers=args.num_workers,
-        pin_memory=True, persistent_workers=True
+        # pin_memory=True, persistent_workers=True
     )
 
     # Define the model
