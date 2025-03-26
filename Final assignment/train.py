@@ -70,8 +70,8 @@ def convert_train_id_to_color(prediction: torch.Tensor) -> torch.Tensor:
 def get_args_parser():
 
     parser = ArgumentParser("Training script for a PyTorch U-Net model")
-    parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
-    parser.add_argument("--batch-size", type=int, default=32, help="Training batch size")
+    parser.add_argument("--data-dir", type=str, default="D:/Cityscapes", help="Path to the training data")
+    parser.add_argument("--batch-size", type=int, default=2, help="Training batch size")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
@@ -156,9 +156,8 @@ def main(args):
 
     # Define the model
     model = smp.DeepLabV3Plus(
-        encoder_name="timm-resnest101e",  
+        encoder_name="resnext101_32x8d",  
         encoder_weights="imagenet",  
-        encoder_output_stride=4,  
         decoder_channels=512,  
         decoder_atrous_rates=(6, 12, 18),  
         in_channels=3,  
@@ -167,7 +166,7 @@ def main(args):
         aux_params=dict(
             pooling="avg",  
             dropout=0.2,  
-            activation="softmax",  
+            activation="softmax2d",  
             classes=19  
         )
     ).to(device)
@@ -202,6 +201,8 @@ def main(args):
 
             optimizer.zero_grad()
             outputs = model(images)
+            if isinstance(outputs, tuple):  # Some segmentation models return (logits, aux_output)
+                outputs = outputs[0]  # Keep only the segmentation output
             # loss_dice = criterion_dice(outputs, labels)
             loss = criterion(outputs, labels)
             loss.backward()
@@ -232,6 +233,8 @@ def main(args):
                 labels = labels.long().squeeze(1)  # Remove channel dimension
 
                 outputs = model(images)
+                if isinstance(outputs, tuple):  # Some segmentation models return (logits, aux_output)
+                    outputs = outputs[0]  # Keep only the segmentation output
                 # loss_dice = criterion_dice(outputs, labels)
                 loss = criterion(outputs, labels)
 
