@@ -70,8 +70,8 @@ def convert_train_id_to_color(prediction: torch.Tensor) -> torch.Tensor:
 def get_args_parser():
 
     parser = ArgumentParser("Training script for a PyTorch U-Net model")
-    parser.add_argument("--data-dir", type=str, default="D:/Cityscapes", help="Path to the training data")
-    parser.add_argument("--batch-size", type=int, default=2, help="Training batch size")
+    parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
+    parser.add_argument("--batch-size", type=int, default=32, help="Training batch size")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
@@ -172,7 +172,7 @@ def main(args):
     ).to(device)
 
     # Define the loss function
-    criterion = FocalLoss(mode='multiclass', ignore_index=255)  # Ignore the void class
+    criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
     # criterion_dice = smp.losses.DiceLoss(mode='multiclass', ignore_index=255)
 
     # Define the optimizer
@@ -279,6 +279,7 @@ def main(args):
                 torch.save(model.state_dict(), model_path)
                 saved_models.append(model_path)
 
+                model.save_pretrained('./resnest101e')
                 if len(saved_models) > max_saved_models:
                     os.remove(saved_models.pop(0))  # Remove the oldest model
         
