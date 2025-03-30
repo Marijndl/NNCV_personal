@@ -77,6 +77,7 @@ def get_args_parser():
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
+    parser.add_argument("--decoder", type=str, default="resnext101_32x8d", help="Decoder name for the DeepLabV3+ model")
 
     return parser
 
@@ -156,7 +157,7 @@ def main(args):
 
     # Define the model
     model = smp.DeepLabV3Plus(
-        encoder_name="resnext101_32x8d",  
+        encoder_name=args.decoder,  
         encoder_weights="imagenet",  
         decoder_channels=512,  
         decoder_atrous_rates=(6, 12, 18),  
