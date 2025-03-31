@@ -2,6 +2,7 @@ import torch
 import os
 from unet import UNet
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
+from tqdm import tqdm
 
 def dice_score(preds, targets, num_classes=19, ignore_index=255, smooth=1e-6):
     """
@@ -106,13 +107,14 @@ def convert_train_id_to_color(prediction: torch.Tensor) -> torch.Tensor:
 
     return color_image
 
+
 def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_classes=19):
     model.eval()
     dice_meter = AverageMeter('Dice', ':6.6f')  # Track Dice scores
     cnt = 0
-    
+
     with torch.no_grad():
-        for i, (image, target) in enumerate(data_loader):
+        for i, (image, target) in tqdm(enumerate(data_loader), total=neval_batches, desc="Evaluating", leave=True):
             target = convert_to_train_id(target)  # Convert class IDs to train IDs
             image, target = image.to(device), target.to(device)
 
@@ -120,16 +122,13 @@ def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_cla
             output = model(image)
             loss = criterion(output, target)
             cnt += 1
-            
+
             dice = dice_score(output, target, num_classes)
             dice_meter.update(dice, image.size(0))  # Update average meter
-            # print(f"Loss: {loss.item()}")
-            # print(f"dice: {dice}")
-            print(i, end=' - ')
-            
+
             if cnt >= neval_batches:
                 break
-    
+
     return dice_meter.avg  # Return the final average Dice score
 
 def rename_state_dict_keys(state_dict):

@@ -124,7 +124,6 @@ def main(args):
     # Note fusion of Conv+BN+Relu and Conv+Relu
     print('\n Inc Block: After fusion\n\n', float_model.inc.double_conv)
 
-
     print("Size of baseline model")
     print_size_of_model(float_model)
 
@@ -136,15 +135,15 @@ def main(args):
     torch.jit.save(torch.jit.script(float_model), saved_model_dir + scripted_float_model_file)
 
     # Fine tune model on training data
-
-    per_channel_quantized_model = load_model(saved_model_dir + float_model_file)
+    per_channel_quantized_model = load_model(saved_model_dir + float_model_file, quantize=True)
+    per_channel_quantized_model = per_channel_quantized_model.to('cpu')
     per_channel_quantized_model.eval()
     per_channel_quantized_model.fuse_model()
     # The old 'fbgemm' is still available but 'x86' is the recommended default.
     per_channel_quantized_model.qconfig = torch.ao.quantization.get_default_qconfig('x86')
     print(per_channel_quantized_model.qconfig)
 
-    num_calibration_batches = 400
+    num_calibration_batches = 20
 
     torch.ao.quantization.prepare(per_channel_quantized_model, inplace=True)
     evaluate(per_channel_quantized_model,criterion, train_dataloader, num_calibration_batches)
