@@ -156,21 +156,7 @@ def main(args):
     )
 
     # Define the model
-    model = smp.DeepLabV3Plus(
-        encoder_name=args.decoder,  
-        encoder_weights="imagenet",  
-        decoder_channels=512,  
-        decoder_atrous_rates=(6, 12, 18),  
-        in_channels=3,  
-        classes=19,  
-        activation=None,  
-        aux_params=dict(
-            pooling="avg",  
-            dropout=0.2,  
-            activation="softmax2d",  
-            classes=19  
-        )
-    ).to(device)
+    model = UNet
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
