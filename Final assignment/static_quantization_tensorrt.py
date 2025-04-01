@@ -16,6 +16,8 @@ from torchvision.transforms.v2 import (
 from utils import *
 import modelopt.torch.quantization as mtq
 import modelopt.torch.opt as mto
+from torch_tensorrt.ts.ptq import DataLoaderCalibrator, CalibrationAlgo
+import torch_tensorrt
 
 def print_size_of_model_tensorrt(model):
     torch.save(model.state_dict(), "temp.pth")
@@ -36,8 +38,8 @@ def get_args_parser():
 def main(args):
     saved_model_dir = './quant_models/'
     float_model_file = 'unet_float.pth'
-    scripted_float_model_file = 'unet_quantization_scripted_tensorrt.pth'
-    scripted_quantized_model_file = 'unet_quantization_scripted_quantized_tensorrt.pth'
+    scripted_float_model_file = 'unet_quantization_scripted_tensorrt2.pth'
+    scripted_quantized_model_file = 'unet_quantization_scripted_quantized_tensorrt2.pth'
 
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = torch.device("cpu")
@@ -50,65 +52,45 @@ def main(args):
     train_dataloader, valid_dataloader = get_dataloaders(args)
     criterion = nn.CrossEntropyLoss(ignore_index=255)
     float_model = load_model(saved_model_dir + float_model_file, quantize=False).to(device)
+    float_model.eval()
 
-    ########## Benchmark original model ###########
+    # Get a sample input batch for TensorRT conversion
+    sample_batch, _ = next(iter(valid_dataloader))
+    sample_input = sample_batch.to(device)
 
-    print("Size of baseline model")
-    print_size_of_model(float_model)
-
-    num_eval_batches = 64
-    float_model = float_model.to(device)
-    dice_avg_float = evaluate(float_model, criterion, valid_dataloader, device=device, neval_batches=num_eval_batches)
-    print(f'Evaluation accuracy on {num_eval_batches * eval_batch_size} images, dice: {dice_avg_float}')
-
+    # Benchmark original model
+    print("Benchmarking PyTorch model:")
     benchmark_model(float_model, valid_dataloader, device)
 
-    ########## Quantize ###########
+    # Set up INT8 calibrator with MinMax algorithm
+    calibrator = DataLoaderCalibrator(
+        dataloader=valid_dataloader,
+        cache_file="calibration.cache",
+        use_cache=False,
+        algo_type=CalibrationAlgo.MINMAX_CALIBRATION,  # Explicitly use MinMax
+        device=device
+    )
 
-    config = mtq.INT8_DEFAULT_CFG
+    # Convert to TensorRT with INT8 precision
+    trt_model = torch_tensorrt.compile(
+        float_model,
+        inputs=[torch_tensorrt.Input(sample_input.shape)],
+        enabled_precisions={torch.int8},  # Request INT8 precision
+        calibrator=calibrator,
+        device=device
+    )
 
-    # Forward loop
-    def forward_loop(model):
-        for image, target in valid_dataloader:
-            target = convert_to_train_id(target)  # Convert class IDs to train IDs
-            image, target = image.to(device), target.to(device)
+    # Benchmark TensorRT model
+    print("\nBenchmarking TensorRT INT8 model:")
+    benchmark_model(trt_model, valid_dataloader, device)
 
-            target = target.long().squeeze(1)  # Remove channel dimension
-            output = model(image)
+    # Save the TensorRT model (optional)
+    torch.jit.save(trt_model, saved_model_dir + "unet_trt_int8.ts")
 
-    # Quantize the model and perform calibration (PTQ)
-    float_model = load_model(saved_model_dir + float_model_file, quantize=True).to(device)
-    float_model.fuse_model()
-    optimized_model = mtq.quantize(float_model, config, forward_loop)
-
-    # Print quantization summary after successfully quantizing the model with mtq.quantize
-    # This will show the quantizers inserted in the model and their configurations
-    mtq.print_quant_summary(optimized_model)
-
-    ########## Benchmark quantized model ###########
-
-    # Fold quantizer together with weight tensor
-    mtq.fold_weight(optimized_model)
-
-    print("Size of quantized model")
-    print_size_of_model_tensorrt(optimized_model)
-
-
-    optimized_model = optimized_model.to(device)
-    dice_avg_quant = evaluate(optimized_model, criterion, valid_dataloader, device=device, neval_batches=num_eval_batches)
-    print(f'Evaluation accuracy on {num_eval_batches * eval_batch_size} images, dice: {dice_avg_quant}')
-    print(f'Quantization resulted in a drop of {dice_avg_float - dice_avg_quant} Dice score, which is {(dice_avg_float - dice_avg_quant)/dice_avg_float*100} % of the float model performance.')
-
-    benchmark_model(optimized_model, valid_dataloader, device)
-
-    ########## Save the optimized model ###########
-
-    torch.save(mto.modelopt_state(optimized_model), saved_model_dir + "modelopt_state.pth")
-    torch.save(optimized_model.state_dict(), saved_model_dir + "modelopt_weights.pth")
-
-    print("Quantized model and successfully saved to disk")
-
-    print(optimized_model.inc.double_conv[0].weight.dtype)
+    # Example inference
+    with torch.no_grad():
+        output = trt_model(sample_input)
+    print(f"Sample output shape: {output.shape}")
 
 
 if __name__ == "__main__":
