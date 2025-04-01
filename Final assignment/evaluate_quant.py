@@ -14,13 +14,21 @@ from torchvision.transforms.v2 import (
 from utils import *
 
 
-def run_benchmark(model_file, img_loader):
+def run_benchmark(model_file, img_loader, device):
     elapsed = 0
-    model = torch.jit.load(model_file)
+    try:
+        model = torch.jit.load(model_file)
+        print("Model loaded successfully")
+    except Exception as e:
+        print(f"Error loading model: {e}")
+
+    model = model.to(device)
     model.eval()
-    num_batches = 5
+    num_batches = 20
     # Run the scripted model on a few batches of images
+    # with torch.no_grad():
     for i, (images, target) in enumerate(img_loader):
+        images, target = images.to(device), target.to(device)
         if i < num_batches:
             start = time.time()
             output = model(images)
@@ -28,22 +36,17 @@ def run_benchmark(model_file, img_loader):
             elapsed = elapsed + (end - start)
         else:
             break
-    num_images = images.size()[0] * num_batches
+    num_images = images.detach().size()[0] * num_batches
 
-    print('Elapsed time: %3.0f ms' % (elapsed / num_images * 1000))
+    print(f'Elapsed time: {elapsed / num_images * 1000:.3f} ms')
     return elapsed
-
 
 def get_args_parser():
     parser = ArgumentParser("Training script for a PyTorch U-Net model")
     parser.add_argument("--data-dir", type=str, default="D:\Cityscapes", help="Path to the training data")
     parser.add_argument("--batch-size", type=int, default=8, help="Training batch size")
-    parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
-    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
-    parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
+    parser.add_argument("--num-workers", type=int, default=0, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
-    parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
-    parser.add_argument("--decoder", type=str, default="resnext101_32x8d", help="Decoder name for the DeepLabV3+ model")
 
     return parser
 
@@ -57,8 +60,6 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    train_batch_size = 32
-    eval_batch_size = args.batch_size
     # Load the dataset and make a split for training and validation
     # Define the transforms to apply to the data
     transform = Compose([
@@ -68,30 +69,13 @@ def main(args):
         Normalize((0.2854, 0.3227, 0.2819), (0.04797, 0.04296, 0.04188)),
     ])
 
-    train_dataset = Cityscapes(args.data_dir, split="train", mode="fine", target_type="semantic",
-                               transforms=transform, )
+
     valid_dataset = Cityscapes(args.data_dir, split="val", mode="fine", target_type="semantic", transforms=transform, )
-
-    train_dataset = wrap_dataset_for_transforms_v2(train_dataset)
     valid_dataset = wrap_dataset_for_transforms_v2(valid_dataset)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
-    train_dataloader = DataLoader(
-        train_dataset,
-        batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=args.num_workers,
-        # pin_memory=True, persistent_workers=True
-    )
-    valid_dataloader = DataLoader(
-        valid_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.num_workers,
-        # pin_memory=True, persistent_workers=True
-    )
-
-    run_benchmark(saved_model_dir + scripted_float_model_file, valid_dataloader)
-    run_benchmark(saved_model_dir + scripted_quantized_model_file, valid_dataloader)
+    run_benchmark(saved_model_dir + scripted_quantized_model_file, valid_dataloader, device='cpu')
+    run_benchmark(saved_model_dir + scripted_float_model_file, valid_dataloader, device='cpu')
 
 if __name__ == "__main__":
     parser = get_args_parser()

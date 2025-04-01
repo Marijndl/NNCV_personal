@@ -56,16 +56,13 @@ class UNet(nn.Module):
                 fuse_modules(m.double_conv, ['0', '1', '2'], inplace=True)
                 fuse_modules(m.double_conv, ['3', '4', '5'], inplace=True)
             elif isinstance(m, Down):
-                # Access the DoubleConv within the Sequential container
-                if isinstance(m.double_conv, nn.Sequential):  # Ensure that double_conv is a Sequential object
-                    fuse_modules(m.double_conv, ['0', '1', '2'], inplace=True)
-                    fuse_modules(m.double_conv, ['3', '4', '5'], inplace=True)
+                if isinstance(m.double_conv, DoubleConv):
+                    fuse_modules(m.double_conv.double_conv, ['0', '1', '2'], inplace=True)
+                    fuse_modules(m.double_conv.double_conv, ['3', '4', '5'], inplace=True)
             elif isinstance(m, Up):
-                # Access the DoubleConv within the Sequential container
-                if isinstance(m.double_conv, nn.Sequential):  # Ensure that double_conv is a Sequential object
-                    fuse_modules(m.double_conv, ['0', '1', '2'], inplace=True)
-                    fuse_modules(m.double_conv, ['3', '4', '5'], inplace=True)
-
+                if isinstance(m.double_conv, DoubleConv):
+                    fuse_modules(m.double_conv.double_conv, ['0', '1', '2'], inplace=True)
+                    fuse_modules(m.double_conv.double_conv, ['3', '4', '5'], inplace=True)
             print(f"Fused {name}")
 
 

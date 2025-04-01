@@ -143,7 +143,7 @@ def main(args):
     per_channel_quantized_model.qconfig = torch.ao.quantization.get_default_qconfig('x86')
     print(per_channel_quantized_model.qconfig)
 
-    num_calibration_batches = 20
+    num_calibration_batches = 100
 
     torch.ao.quantization.prepare(per_channel_quantized_model, inplace=True)
     evaluate(per_channel_quantized_model,criterion, train_dataloader, num_calibration_batches)
