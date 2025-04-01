@@ -41,8 +41,8 @@ def main(args):
     scripted_float_model_file = 'unet_quantization_scripted_tensorrt2.pth'
     scripted_quantized_model_file = 'unet_quantization_scripted_quantized_tensorrt2.pth'
 
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = torch.device("cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cpu")
     print(f"Using device: {device}")
 
     train_batch_size = 32
