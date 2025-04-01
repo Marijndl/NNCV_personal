@@ -28,7 +28,7 @@ def get_args_parser():
     return parser
 
 def main(args):
-    saved_model_dir = './quant_models'
+    saved_model_dir = './quant_models/'
     float_model_file = 'unet_float.pth'
     scripted_float_model_file = 'unet_quantization_scripted_tensorrt.pth'
     scripted_quantized_model_file = 'unet_quantization_scripted_quantized_tensorrt.pth'
