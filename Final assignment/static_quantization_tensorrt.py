@@ -49,7 +49,7 @@ def main(args):
     eval_batch_size = args.batch_size
     # Load the dataset and make a split for training and validation
     # Define the transforms to apply to the data
-    train_dataloader, valid_dataloader = get_dataloaders(args)
+    train_dataloader, valid_dataloader = get_dataloaders(args.data_dir, args.batch_size, args.num_workers)
     criterion = nn.CrossEntropyLoss(ignore_index=255)
     float_model = load_model(saved_model_dir + float_model_file, quantize=False).to(device)
     float_model.eval()
@@ -62,14 +62,27 @@ def main(args):
     print("Benchmarking PyTorch model:")
     benchmark_model(float_model, valid_dataloader, device)
 
-    # Set up INT8 calibrator with MinMax algorithm
-    calibrator = DataLoaderCalibrator(
-        dataloader=valid_dataloader,
-        cache_file="calibration.cache",
-        use_cache=False,
-        algo_type=CalibrationAlgo.MINMAX_CALIBRATION,  # Explicitly use MinMax
-        device=device
-    )
+    # Debug: Verify DataLoaderCalibrator availability and arguments
+    print("Creating DataLoaderCalibrator with:")
+    print(f"  dataloader: {valid_dataloader}")
+    print(f"  algo_type: {CalibrationAlgo.MINMAX_CALIBRATION}")
+    print(f"  cache_file: calibration.cache")
+    print(f"  use_cache: False")
+    print(f"  device: {device}")
+
+    # Set up INT8 calibrator with keyword arguments as per docstring
+    try:
+        calibrator = DataLoaderCalibrator(
+            dataloader=valid_dataloader,
+            algo_type=CalibrationAlgo.MINMAX_CALIBRATION,
+            cache_file="calibration.cache",
+            use_cache=False,
+            device=device
+        )
+        print("Calibrator created successfully.")
+    except Exception as e:
+        print(f"Failed to create calibrator: {e}")
+        raise
 
     # Convert to TensorRT with INT8 precision
     trt_model = torch_tensorrt.compile(

@@ -312,7 +312,7 @@ def print_size_of_model(model):
     os.remove('temp.p')
 
 
-def get_dataloaders(args):
+def get_dataloaders(data_dir, batch_size, num_workers):
     transform = Compose([
         ToImage(),
         Resize((256, 256), antialias=True),
@@ -320,14 +320,12 @@ def get_dataloaders(args):
         Normalize((0.2854, 0.3227, 0.2819), (0.04797, 0.04296, 0.04188)),
     ])
 
-    train_dataset = Cityscapes(args.data_dir, split="train", mode="fine", target_type="semantic",
-                               transforms=transform, )
-    valid_dataset = Cityscapes(args.data_dir, split="val", mode="fine", target_type="semantic", transforms=transform, )
+    train_dataset = Cityscapes(data_dir, split="train", mode="fine", target_type="semantic", transforms=transform)
+    valid_dataset = Cityscapes(data_dir, split="val", mode="fine", target_type="semantic", transforms=transform)
 
     train_dataset = wrap_dataset_for_transforms_v2(train_dataset)
     valid_dataset = wrap_dataset_for_transforms_v2(valid_dataset)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-    valid_dataloader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False,
-                                  num_workers=args.num_workers)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,  num_workers=num_workers)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     return train_dataloader, valid_dataloader
