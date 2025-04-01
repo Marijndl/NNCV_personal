@@ -14,6 +14,7 @@ from torchvision.transforms.v2 import (
 )
 
 from utils import *
+from calflops import calculate_flops
 
 
 def get_args_parser():
@@ -33,8 +34,8 @@ def get_args_parser():
 def main(args):
     saved_model_dir = r'C:\Users\20203226\Documents\GitHub\NNCV\Final assignment\models'
     float_model_file = r'\unet_float.pth'
-    scripted_float_model_file = 'unet_quantization_scripted.pth'
-    scripted_quantized_model_file = 'unet_quantization_scripted_quantized.pth'
+    scripted_float_model_file = 'unet_quantization_scripted.pth2'
+    scripted_quantized_model_file = 'unet_quantization_scripted_quantized.pth2'
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -73,6 +74,9 @@ def main(args):
     )
     criterion = nn.CrossEntropyLoss(ignore_index=255)
     float_model = load_model(saved_model_dir + float_model_file, quantize=False).to('cpu')
+
+    flops, macs, params = calculate_flops(model=float_model, input_shape=(64, 3, 256, 256))
+    print(f"Float model FLOPs: {flops}, MACs: {macs}, Params: {params}")
 
     # Next, we'll "fuse modules"; this can both make the model faster by saving on memory access
     # while also improving numerical accuracy. While this can be used with any model, this is

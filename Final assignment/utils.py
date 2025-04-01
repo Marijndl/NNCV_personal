@@ -114,7 +114,7 @@ def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_cla
     cnt = 0
 
     with torch.no_grad():
-        for i, (image, target) in tqdm(enumerate(data_loader), total=neval_batches, desc="Evaluating", leave=True):
+        for i, (image, target) in tqdm(enumerate(data_loader), total=neval_batches-1, desc="Evaluating", leave=True):
             target = convert_to_train_id(target)  # Convert class IDs to train IDs
             image, target = image.to(device), target.to(device)
 
@@ -157,7 +157,6 @@ def load_model(model_file, quantize=False):
 
     # Load the modified state dict into the model
     model.load_state_dict(state_dict, strict=True)  # set strict=False to ignore size mismatch
-    model.to('cpu')
     return model
 
 def print_size_of_model(model):
