@@ -14,7 +14,6 @@ from torchvision.transforms.v2 import (
 )
 
 from utils import *
-from calflops import calculate_flops
 import torch_tensorrt
 
 
