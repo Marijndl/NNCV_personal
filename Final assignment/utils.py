@@ -1,11 +1,21 @@
-import torch
 import os
-from unet import UNet
-from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
-from tqdm import tqdm
+
+import kornia.filters as kf
 import torch
 import torchvision.transforms.v2 as T
-import kornia.filters as kf
+from torch.utils.data import DataLoader
+from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
+from torchvision.transforms.v2 import (
+    Compose,
+    Normalize,
+    Resize,
+    ToImage,
+    ToDtype,
+)
+from tqdm import tqdm
+
+from unet import UNet
+
 
 class MotionBlurTransform(T.Transform):
     def __call__(self, sample):
@@ -31,7 +41,7 @@ class MotionBlurTransform(T.Transform):
                 Mf[Mf > 0] = 1  # Binary mask where selected classes are
 
                 # Generate motion blur with random parameters
-                kernel_size = torch.randint(5, 9, (1,)).item() * 2 + 1  #only odd numbers
+                kernel_size = torch.randint(5, 9, (1,)).item() * 2 + 1  # only odd numbers
                 angle = torch.rand(1).item() * 360  # 0-360 degrees
                 direction = torch.rand(1).item() * 2 - 1  # -1 to 1
                 # Apply motion blur to the part where Mf=1
@@ -42,6 +52,7 @@ class MotionBlurTransform(T.Transform):
                 # Combine: where Mf=1 use blurred, else original
                 image = blurred_part + non_blurred_part
         return image, mask
+
 
 def dice_score(preds, targets, num_classes=19, ignore_index=255, smooth=1e-6):
     """
@@ -72,7 +83,7 @@ def dice_score(preds, targets, num_classes=19, ignore_index=255, smooth=1e-6):
         union = pred_class.sum(dim=(1, 2)) + target_class.sum(dim=(1, 2))
 
         dice = (2. * intersection + smooth) / (union + smooth)
-        
+
         # Avoid including empty classes in the mean
         valid_class_mask = union > 0  # Avoid empty class issue
         if valid_class_mask.any():
@@ -85,8 +96,10 @@ def dice_score(preds, targets, num_classes=19, ignore_index=255, smooth=1e-6):
 
     return mean_dice
 
+
 class AverageMeter(object):
     """Computes and stores the average and current value"""
+
     def __init__(self, name, fmt=':f'):
         self.name = name
         self.fmt = fmt
@@ -125,14 +138,19 @@ def accuracy(output, target, topk=(1,)):
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
 
+
 # Mapping class IDs to train IDs
 id_to_trainid = {cls.id: cls.train_id for cls in Cityscapes.classes}
+
+
 def convert_to_train_id(label_img: torch.Tensor) -> torch.Tensor:
     return label_img.apply_(lambda x: id_to_trainid[x])
+
 
 # Mapping train IDs to color
 train_id_to_color = {cls.train_id: cls.color for cls in Cityscapes.classes if cls.train_id != 255}
 train_id_to_color[255] = (0, 0, 0)  # Assign black to ignored labels
+
 
 def convert_train_id_to_color(prediction: torch.Tensor) -> torch.Tensor:
     batch, _, height, width = prediction.shape
@@ -153,7 +171,7 @@ def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_cla
     cnt = 0
 
     with torch.no_grad():
-        for i, (image, target) in tqdm(enumerate(data_loader), total=neval_batches-1, desc="Evaluating", leave=True):
+        for i, (image, target) in tqdm(enumerate(data_loader), total=neval_batches - 1, desc="Evaluating", leave=True):
             target = convert_to_train_id(target)  # Convert class IDs to train IDs
             image, target = image.to(device), target.to(device)
 
@@ -170,17 +188,18 @@ def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_cla
 
     return dice_meter.avg  # Return the final average Dice score
 
+
 def rename_state_dict_keys(state_dict):
     new_state_dict = {}
     for key in state_dict.keys():
-        new_key = key.replace("maxpool_conv.1", "double_conv")\
-                     .replace(".conv.double_conv", ".double_conv.double_conv")
-                     # .replace( "down3", "down3.double_conv")\
-                     # .replace( "down4", "down4.double_conv")\
-                     # .replace("up1", "up1.double_conv")\
-                     # .replace("up2", "up2.double_conv")\
-                     # .replace("up3", "up3.double_conv")\
-                     # .replace("up4", "up4.double_conv")
+        new_key = key.replace("maxpool_conv.1", "double_conv") \
+            .replace(".conv.double_conv", ".double_conv.double_conv")
+        # .replace( "down3", "down3.double_conv")\
+        # .replace( "down4", "down4.double_conv")\
+        # .replace("up1", "up1.double_conv")\
+        # .replace("up2", "up2.double_conv")\
+        # .replace("up3", "up3.double_conv")\
+        # .replace("up4", "up4.double_conv")
 
         new_state_dict[new_key] = state_dict[key]
     return new_state_dict
@@ -198,7 +217,29 @@ def load_model(model_file, quantize=False):
     model.load_state_dict(state_dict, strict=True)  # set strict=False to ignore size mismatch
     return model
 
+
 def print_size_of_model(model):
     torch.save(model.state_dict(), "temp.p")
-    print('Size (MB):', os.path.getsize("temp.p")/1e6)
+    print('Size (MB):', os.path.getsize("temp.p") / 1e6)
     os.remove('temp.p')
+
+
+def get_dataloaders(args):
+    transform = Compose([
+        ToImage(),
+        Resize((256, 256), antialias=True),
+        ToDtype(torch.float32, scale=True),
+        Normalize((0.2854, 0.3227, 0.2819), (0.04797, 0.04296, 0.04188)),
+    ])
+
+    train_dataset = Cityscapes(args.data_dir, split="train", mode="fine", target_type="semantic",
+                               transforms=transform, )
+    valid_dataset = Cityscapes(args.data_dir, split="val", mode="fine", target_type="semantic", transforms=transform, )
+
+    train_dataset = wrap_dataset_for_transforms_v2(train_dataset)
+    valid_dataset = wrap_dataset_for_transforms_v2(valid_dataset)
+
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False,
+                                  num_workers=args.num_workers)
+    return train_dataloader, valid_dataloader

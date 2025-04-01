@@ -17,6 +17,10 @@ from utils import *
 import modelopt.torch.quantization as mtq
 import modelopt.torch.opt as mto
 
+def print_size_of_model_tensorrt(model):
+    mto.save(model, "temp.pth")
+    print('Size (MB):', os.path.getsize("temp.pth")/1e6)
+    os.remove('temp.pth')
 
 
 def get_args_parser():
@@ -42,30 +46,23 @@ def main(args):
     eval_batch_size = args.batch_size
     # Load the dataset and make a split for training and validation
     # Define the transforms to apply to the data
-    transform = Compose([
-        ToImage(),
-        Resize((256, 256), antialias=True),
-        ToDtype(torch.float32, scale=True),
-        Normalize((0.2854, 0.3227, 0.2819), (0.04797, 0.04296, 0.04188)),
-    ])
-
-    train_dataset = Cityscapes(args.data_dir, split="train", mode="fine", target_type="semantic",
-                               transforms=transform, )
-    valid_dataset = Cityscapes(args.data_dir, split="val", mode="fine", target_type="semantic", transforms=transform, )
-
-    train_dataset = wrap_dataset_for_transforms_v2(train_dataset)
-    valid_dataset = wrap_dataset_for_transforms_v2(valid_dataset)
-
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-    valid_dataloader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+    train_dataloader, valid_dataloader = get_dataloaders(args)
     criterion = nn.CrossEntropyLoss(ignore_index=255)
     float_model = load_model(saved_model_dir + float_model_file, quantize=False).to(device)
 
     ########## Tutorial part ###########
 
+    print("Size of baseline model")
+    print_size_of_model(float_model)
+
+    num_eval_batches = 64
+    float_model = float_model.to(device)
+    dice_avg = evaluate(float_model, criterion, valid_dataloader, device=device, neval_batches=num_eval_batches)
+    print(f'Evaluation accuracy on {num_eval_batches * eval_batch_size} images, dice: {dice_avg}')
+
     config = mtq.INT8_DEFAULT_CFG
 
-    # Define forward_loop. Please wrap the data loader in the forward_loop
+    # Forward loop
     def forward_loop(model):
         for image, target in valid_dataloader:
             target = convert_to_train_id(target)  # Convert class IDs to train IDs
@@ -81,11 +78,17 @@ def main(args):
     # This will show the quantizers inserted in the model and their configurations
     mtq.print_quant_summary(optimized_model)
 
+    print("Size of quantized model")
+    print_size_of_model_tensorrt(float_model)
+
+    optimized_model = optimized_model.to(device)
+    dice_avg = evaluate(optimized_model, criterion, valid_dataloader, device=device, neval_batches=num_eval_batches)
+    print(f'Evaluation accuracy on {num_eval_batches * eval_batch_size} images, dice: {dice_avg}')
+
     # Save the optimized model
     torch.save(mto.modelopt_state(optimized_model), saved_model_dir + "modelopt_state.pth")
     torch.save(optimized_model.state_dict(), saved_model_dir + "modelopt_weights.pth")
 
-    torch.jit.save(torch.jit.script(optimized_model), saved_model_dir + scripted_quantized_model_file)
     print("Quantized model and successfully saved to disk")
 
 
