@@ -3,6 +3,46 @@ import os
 from unet import UNet
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
 from tqdm import tqdm
+import torch
+import torchvision.transforms.v2 as T
+import kornia.filters as kf
+import matplotlib.pyplot as plt
+
+class MotionBlurTransform(T.Transform):
+    def __call__(self, sample):
+        image, mask = sample
+        p = torch.rand(1).item()
+        if p > 0.5:
+            # Sample c between 1 and C, C is 19 for Cityscapes (0-18, ignoring 255)
+            C = 19
+            c = torch.randint(1, C + 1, (1,)).item()
+            # Get unique classes, filter out 255
+            classes = torch.unique(mask[mask != 255])
+            if len(classes) < c:
+                c = len(classes)  # Adjust if not enough classes
+            if c > 0:
+                # Randomly select c classes
+                selected_classes = classes[torch.randperm(len(classes))[:c]]
+                print(f"Selected classes: {selected_classes}")
+
+                # Create Mf by summing masks for selected classes
+                Mf = torch.zeros_like(mask, dtype=torch.float32)
+                for cls in selected_classes:
+                    Mf += (mask == cls).float()
+                Mf[Mf > 0] = 1  # Binary mask where selected classes are
+
+                # Generate motion blur with random parameters
+                kernel_size = torch.randint(5, 9, (1,)).item() * 2 + 1  #only odd numbers
+                angle = torch.rand(1).item() * 360  # 0-360 degrees
+                direction = torch.rand(1).item() * 2 - 1  # -1 to 1
+                # Apply motion blur to the part where Mf=1
+                blurred_part = image * Mf.unsqueeze(0)  # [C, H, W]
+                blurred_part = kf.motion_blur(blurred_part, kernel_size, angle, direction, border_type='reflect')
+                # Non-blurred part where Mf=0
+                non_blurred_part = image * (1 - Mf.unsqueeze(0))
+                # Combine: where Mf=1 use blurred, else original
+                image = blurred_part + non_blurred_part
+        return image, mask
 
 def dice_score(preds, targets, num_classes=19, ignore_index=255, smooth=1e-6):
     """

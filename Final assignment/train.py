@@ -41,7 +41,6 @@ from utils import *
 from unet import UNet
 import segmentation_models_pytorch as smp
 
-
 saved_models = []
 max_saved_models = 3  # Keep last 3 best models
 
@@ -103,6 +102,8 @@ def main(args):
     # Define the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
+
+
 
     # Define the transforms to apply to the images
     transform_train = Compose([
