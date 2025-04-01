@@ -61,15 +61,15 @@ def main(args):
 
     ########## Tutorial part ###########
 
-    calibrator = torch_tensorrt.ptq.DataLoaderCalibrator(
+    calibrator = torch_tensorrt.ts.ptq(
         valid_dataloader,
         cache_file="./calibration.cache",
         use_cache=False,
-        algo_type=torch_tensorrt.ptq.CalibrationAlgo.ENTROPY_CALIBRATION_2,
+        algo_type=torch_tensorrt.ts.ptq.CalibrationAlgo.ENTROPY_CALIBRATION_2,
         device=torch.device("cuda:0"),
     )
 
-    optimized_model = torch_tensorrt.compile(float_model, inputs=[torch_tensorrt.Input((args.batch_size, 3, 32, 32))],
+    optimized_model = torch_tensorrt.compile(float_model, inputs=[torch_tensorrt.Input((args.batch_size, 3, 256, 256))],
                                      enabled_precisions={torch.float, torch.half, torch.int8},
                                      calibrator=calibrator,
                                      device={
