@@ -19,7 +19,7 @@ import torch_tensorrt
 
 def get_args_parser():
     parser = ArgumentParser("Training script for a PyTorch U-Net model")
-    parser.add_argument("--data-dir", type=str, default="D:\Cityscapes", help="Path to the training data")
+    parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
     parser.add_argument("--batch-size", type=int, default=1, help="Training batch size")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--num-workers", type=int, default=1, help="Number of workers for data loaders")
@@ -28,8 +28,8 @@ def get_args_parser():
     return parser
 
 def main(args):
-    saved_model_dir = r'C:\Users\20203226\Documents\GitHub\NNCV\Final assignment\models'
-    float_model_file = r'\unet_float.pth'
+    saved_model_dir = './quant_models'
+    float_model_file = 'unet_float.pth'
     scripted_float_model_file = 'unet_quantization_scripted_tensorrt.pth'
     scripted_quantized_model_file = 'unet_quantization_scripted_quantized_tensorrt.pth'
 
