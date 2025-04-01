@@ -1,48 +1,17 @@
-import os
-import sys
-import time
-import numpy as np
 from argparse import ArgumentParser
 
-import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-from torch.utils.data import DataLoader
-from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
-
-import torchvision
-from torchvision import datasets
-import torchvision.transforms as transforms
-from torch.ao.quantization import QuantStub, DeQuantStub
-
-import os
 from argparse import ArgumentParser
 
-import wandb
-import torch
 import torch.nn as nn
-from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
-from torchvision.utils import make_grid
-from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR, OneCycleLR
-from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 from torchvision.transforms.v2 import (
     Compose,
     Normalize,
     Resize,
     ToImage,
     ToDtype,
-    InterpolationMode,
-    RandomCrop,
-    CenterCrop,
-    RandomHorizontalFlip,
-
 )
-from utils import *
-
-from unet import UNet
-import segmentation_models_pytorch as smp
 
 from utils import *
 
@@ -146,7 +115,7 @@ def main(args):
     num_calibration_batches = 100
 
     torch.ao.quantization.prepare(per_channel_quantized_model, inplace=True)
-    evaluate(per_channel_quantized_model,criterion, train_dataloader, num_calibration_batches)
+    evaluate(per_channel_quantized_model, criterion, train_dataloader, num_calibration_batches)
     torch.ao.quantization.convert(per_channel_quantized_model, inplace=True)
 
     # Evaluation after quantization:
