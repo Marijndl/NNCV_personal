@@ -73,7 +73,7 @@ def main(args):
     # Set up INT8 calibrator with keyword arguments as per docstring
     try:
         calibrator = DataLoaderCalibrator(
-            dataloader=valid_dataloader,
+            valid_dataloader,  # Positional argument
             algo_type=CalibrationAlgo.MINMAX_CALIBRATION,
             cache_file="calibration.cache",
             use_cache=False,
