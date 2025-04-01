@@ -15,16 +15,20 @@ from utils import *
 
 
 def run_benchmark(model_file, img_loader, device):
+    print(f'Running {model_file}')
     elapsed = 0
     try:
-        model = torch.jit.load(model_file)
+        if model_file.endswith('unet_float.pth'):
+            model = load_model(model_file, False)
+        else:
+            model = torch.jit.load(model_file)
         print("Model loaded successfully")
     except Exception as e:
         print(f"Error loading model: {e}")
 
     model = model.to(device)
     model.eval()
-    num_batches = 20
+    num_batches = 40
     # Run the scripted model on a few batches of images
     # with torch.no_grad():
     for i, (images, target) in enumerate(img_loader):
@@ -75,6 +79,7 @@ def main(args):
     valid_dataloader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     run_benchmark(saved_model_dir + scripted_quantized_model_file, valid_dataloader, device='cpu')
+    run_benchmark(r"C:\Users\20203226\Documents\GitHub\NNCV\Final assignment\models\unet_float.pth", valid_dataloader, device='cpu')
     run_benchmark(saved_model_dir + scripted_float_model_file, valid_dataloader, device='cpu')
 
 if __name__ == "__main__":
