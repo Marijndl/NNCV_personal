@@ -58,7 +58,7 @@ def main(args):
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     valid_dataloader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     criterion = nn.CrossEntropyLoss(ignore_index=255)
-    float_model = load_model(saved_model_dir + float_model_file, quantize=False).to('cpu')
+    float_model = load_model(saved_model_dir + float_model_file, quantize=False).to(device)
 
     ########## Tutorial part ###########
 
