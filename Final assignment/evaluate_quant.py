@@ -1,6 +1,7 @@
 import time
 from argparse import ArgumentParser
 
+import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.transforms.v2 import (
@@ -10,8 +11,23 @@ from torchvision.transforms.v2 import (
     ToImage,
     ToDtype,
 )
+from torch.profiler import profile, ProfilerActivity
 
 from utils import *
+from fvcore.nn import FlopCountAnalysis
+
+
+def calculate_flops(model, images, device):
+    model = model.to(device)
+    model.eval()
+    images = images.to(device)
+
+    try:
+        flop_counter = FlopCountAnalysis(model, images)
+        return flop_counter.total()
+    except Exception as e:
+        print(f"Error calculating FLOPS: {e}")
+        return 0
 
 
 def run_benchmark(model_file, img_loader, device):
@@ -25,25 +41,32 @@ def run_benchmark(model_file, img_loader, device):
         print("Model loaded successfully")
     except Exception as e:
         print(f"Error loading model: {e}")
+        return
 
     model = model.to(device)
     model.eval()
-    num_batches = 40
+    num_batches = 20
+    flops = 0
+
     # Run the scripted model on a few batches of images
-    # with torch.no_grad():
     for i, (images, target) in enumerate(img_loader):
         images, target = images.to(device), target.to(device)
+        if i == 0:
+            flops = calculate_flops(model, images, device)
+
         if i < num_batches:
             start = time.time()
             output = model(images)
             end = time.time()
-            elapsed = elapsed + (end - start)
+            elapsed += (end - start)
         else:
             break
-    num_images = images.detach().size()[0] * num_batches
 
+    num_images = images.detach().size()[0] * num_batches
     print(f'Elapsed time: {elapsed / num_images * 1000:.3f} ms')
+    print(f'Estimated FLOPS: {flops:.6f}')
     return elapsed
+
 
 def get_args_parser():
     parser = ArgumentParser("Training script for a PyTorch U-Net model")
@@ -51,7 +74,6 @@ def get_args_parser():
     parser.add_argument("--batch-size", type=int, default=8, help="Training batch size")
     parser.add_argument("--num-workers", type=int, default=0, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
-
     return parser
 
 
@@ -73,14 +95,14 @@ def main(args):
         Normalize((0.2854, 0.3227, 0.2819), (0.04797, 0.04296, 0.04188)),
     ])
 
-
-    valid_dataset = Cityscapes(args.data_dir, split="val", mode="fine", target_type="semantic", transforms=transform, )
+    valid_dataset = Cityscapes(args.data_dir, split="val", mode="fine", target_type="semantic", transforms=transform)
     valid_dataset = wrap_dataset_for_transforms_v2(valid_dataset)
     valid_dataloader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     run_benchmark(saved_model_dir + scripted_quantized_model_file, valid_dataloader, device='cpu')
     run_benchmark(r"C:\Users\20203226\Documents\GitHub\NNCV\Final assignment\models\unet_float.pth", valid_dataloader, device='cpu')
     run_benchmark(saved_model_dir + scripted_float_model_file, valid_dataloader, device='cpu')
+
 
 if __name__ == "__main__":
     parser = get_args_parser()

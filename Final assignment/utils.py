@@ -6,7 +6,6 @@ from tqdm import tqdm
 import torch
 import torchvision.transforms.v2 as T
 import kornia.filters as kf
-import matplotlib.pyplot as plt
 
 class MotionBlurTransform(T.Transform):
     def __call__(self, sample):
