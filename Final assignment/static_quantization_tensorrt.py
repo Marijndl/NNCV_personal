@@ -77,6 +77,7 @@ def main(args):
             output = model(image)
 
     # Quantize the model and perform calibration (PTQ)
+    float_model = load_model(saved_model_dir + float_model_file, quantize=True).to(device)
     float_model.fuse_model()
     optimized_model = mtq.quantize(float_model, config, forward_loop)
 
