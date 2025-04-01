@@ -18,7 +18,7 @@ import modelopt.torch.quantization as mtq
 import modelopt.torch.opt as mto
 
 def print_size_of_model_tensorrt(model):
-    mto.save(model, "temp.pth")
+    torch.save(model.state_dict(), "temp.pth")
     print('Size (MB):', os.path.getsize("temp.pth")/1e6)
     os.remove('temp.pth')
 
@@ -39,7 +39,8 @@ def main(args):
     scripted_float_model_file = 'unet_quantization_scripted_tensorrt.pth'
     scripted_quantized_model_file = 'unet_quantization_scripted_quantized_tensorrt.pth'
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
     print(f"Using device: {device}")
 
     train_batch_size = 32
@@ -76,6 +77,7 @@ def main(args):
             output = model(image)
 
     # Quantize the model and perform calibration (PTQ)
+    float_model.fuse_model()
     optimized_model = mtq.quantize(float_model, config, forward_loop)
 
     # Print quantization summary after successfully quantizing the model with mtq.quantize
@@ -90,6 +92,7 @@ def main(args):
     print("Size of quantized model")
     print_size_of_model_tensorrt(optimized_model)
 
+
     optimized_model = optimized_model.to(device)
     dice_avg_quant = evaluate(optimized_model, criterion, valid_dataloader, device=device, neval_batches=num_eval_batches)
     print(f'Evaluation accuracy on {num_eval_batches * eval_batch_size} images, dice: {dice_avg_quant}')
@@ -103,6 +106,8 @@ def main(args):
     torch.save(optimized_model.state_dict(), saved_model_dir + "modelopt_weights.pth")
 
     print("Quantized model and successfully saved to disk")
+
+    print(optimized_model.inc.double_conv[0].weight.dtype)
 
 
 if __name__ == "__main__":
