@@ -16,6 +16,94 @@ from tqdm import tqdm
 
 from unet import UNet
 
+import time
+from thop import profile
+
+
+def benchmark_model(model, data_loader, device, num_batches=64, num_warmup=2):
+    """
+    Benchmark the model by calculating inference time and computational complexity.
+
+    Args:
+        model (nn.Module): The model to benchmark.
+        data_loader (DataLoader): DataLoader for validation data.
+        device (torch.device): Device to run the model on.
+        num_batches (int): Number of batches to time.
+        num_warmup (int): Number of warm-up batches.
+
+    Prints:
+        Computational complexity in GMACs.
+        Number of parameters in millions.
+        Inference time per image in ms.
+        Images per second.
+    """
+    model.eval()
+
+    # Get input shape for FLOPs calculation
+    for image, _ in data_loader:
+        input_shape = image.shape
+        break
+    dummy_input = torch.randn(1, *input_shape[1:]).to(device)
+
+    # Calculate MACs and parameters using thop
+    macs, params = profile(model, inputs=(dummy_input,))
+    print(f"Computational complexity: {macs / 1e9:.2f} GMACs")
+    print(f"Number of parameters: {params / 1e6:.2f} M")
+
+    # Warm-up to stabilize GPU performance
+    data_iter = iter(data_loader)
+    for _ in range(num_warmup):
+        try:
+            image, _ = next(data_iter)
+        except StopIteration:
+            break
+        image = image.to(device)
+        with torch.no_grad():
+            _ = model(image)
+        if device.type == 'cuda':
+            torch.cuda.synchronize()
+
+    # Timing loop, accounting for actual number of images per batch
+    total_time = 0
+    total_images = 0
+    for i in range(num_batches):
+        try:
+            image, _ = next(data_iter)
+        except StopIteration:
+            break
+        num_images = image.size(0)
+        image = image.to(device)
+
+        if device.type == 'cuda':
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+            start_event.record()
+            with torch.no_grad():
+                _ = model(image)
+            end_event.record()
+            torch.cuda.synchronize()
+            batch_time = start_event.elapsed_time(end_event) / 1000  # Convert ms to seconds
+        else:
+            start_time = time.time()
+            with torch.no_grad():
+                _ = model(image)
+            end_time = time.time()
+            batch_time = end_time - start_time
+
+        total_time += batch_time
+        total_images += num_images
+
+    if total_images == 0:
+        print("No images were processed.")
+        return
+
+    # Calculate final metrics
+    average_time_per_image = total_time / total_images
+    time_ms = average_time_per_image * 1000
+    images_per_second = 1 / average_time_per_image if average_time_per_image > 0 else float('inf')
+
+    print(f"Inference time per image: {time_ms:.2f} ms")
+    print(f"Images per second: {images_per_second:.2f}")
 
 class MotionBlurTransform(T.Transform):
     def __call__(self, sample):
