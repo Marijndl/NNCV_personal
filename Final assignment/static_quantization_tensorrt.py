@@ -14,7 +14,9 @@ from torchvision.transforms.v2 import (
 )
 
 from utils import *
-import torch_tensorrt
+import modelopt.torch.quantization as mtq
+import modelopt.torch.opt as mto
+
 
 
 def get_args_parser():
@@ -61,25 +63,28 @@ def main(args):
 
     ########## Tutorial part ###########
 
-    calibrator = torch_tensorrt.ts.ptq(
-        valid_dataloader,
-        cache_file="./calibration.cache",
-        use_cache=False,
-        algo_type=torch_tensorrt.ts.ptq.CalibrationAlgo.ENTROPY_CALIBRATION_2,
-        device=torch.device("cuda:0"),
-    )
+    config = mtq.INT8_DEFAULT_CFG
 
-    optimized_model = torch_tensorrt.compile(float_model, inputs=[torch_tensorrt.Input((args.batch_size, 3, 256, 256))],
-                                     enabled_precisions={torch.float, torch.half, torch.int8},
-                                     calibrator=calibrator,
-                                     device={
-                                         "device_type": torch_tensorrt.DeviceType.GPU,
-                                         "gpu_id": 0,
-                                         "dla_core": 0,
-                                         "allow_gpu_fallback": False,
-                                         "disable_tf32": False
-                                     })
+    # Define forward_loop. Please wrap the data loader in the forward_loop
+    def forward_loop(model):
+        for image, target in valid_dataloader:
+            target = convert_to_train_id(target)  # Convert class IDs to train IDs
+            image, target = image.to(device), target.to(device)
+
+            target = target.long().squeeze(1)  # Remove channel dimension
+            output = model(image)
+
+    # Quantize the model and perform calibration (PTQ)
+    optimized_model = mtq.quantize(float_model, config, forward_loop)
+
+    # Print quantization summary after successfully quantizing the model with mtq.quantize
+    # This will show the quantizers inserted in the model and their configurations
+    mtq.print_quant_summary(optimized_model)
+
     # Save the optimized model
+    torch.save(mto.modelopt_state(optimized_model), saved_model_dir + "modelopt_state.pth")
+    torch.save(optimized_model.state_dict(), saved_model_dir + "modelopt_weights.pth")
+
     torch.jit.save(torch.jit.script(optimized_model), saved_model_dir + scripted_quantized_model_file)
     print("Quantized model and successfully saved to disk")
 
