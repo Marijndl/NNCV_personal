@@ -42,7 +42,7 @@ def main(args):
     eval_batch_size = args.batch_size
 
     # Load dataset
-    train_dataloader, valid_dataloader = get_dataloaders(args)
+    train_dataloader, valid_dataloader = get_dataloaders(args.data_dir, args.batch_size, args.num_workers)
     criterion = nn.CrossEntropyLoss(ignore_index=255)
     float_model = load_model(saved_model_dir + float_model_file, quantize=False).to(device)
 
