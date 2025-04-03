@@ -18,7 +18,6 @@ from argparse import ArgumentParser
 import wandb
 import torch
 import torch.nn as nn
-from sipbuild.generator.parser.annotations import boolean
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
