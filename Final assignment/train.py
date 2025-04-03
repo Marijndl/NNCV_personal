@@ -18,6 +18,7 @@ from argparse import ArgumentParser
 import wandb
 import torch
 import torch.nn as nn
+from sipbuild.generator.parser.annotations import boolean
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes, wrap_dataset_for_transforms_v2
@@ -76,7 +77,9 @@ def get_args_parser():
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
+    parser.add_argument("--model", type=str, default="unet", help="Choose the model to train")
     parser.add_argument("--decoder", type=str, default="resnext101_32x8d", help="Decoder name for the DeepLabV3+ model")
+    parser.add_argument("--motion-blur", type=bool, default=False, help="Wether to include the motion blur data augmentation")
 
     return parser
 
@@ -103,17 +106,16 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-
-
+    # Define the transforms to apply to the images
     # Define the transforms to apply to the images
     transform_train = Compose([
-        ToImage(),
-        RandomHorizontalFlip(0.5),
-        # RandomCrop((512, 1024)),  # Crop to focus on smaller details
-        Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
-        ToDtype(torch.float32, scale=True),
-        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
+          ToImage(),
+          RandomHorizontalFlip(0.5),
+          # RandomCrop((512, 1024)),  # Crop to focus on smaller details
+          Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
+          ToDtype(torch.float32, scale=True),
+          Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+      ] + ([MotionBlurTransform()] if args.motion_blur else []))
 
     transform_val = Compose([
         ToImage(),
@@ -137,9 +139,17 @@ def main(args):
         target_type="semantic", 
         transforms=transform_val,
     )
+    test_dataset = Cityscapes(
+        args.data_dir,
+        split="test",
+        mode="fine",
+        target_type="semantic",
+        transforms=transform_val,
+    )
 
     train_dataset = wrap_dataset_for_transforms_v2(train_dataset)
     valid_dataset = wrap_dataset_for_transforms_v2(valid_dataset)
+    test_dataset = wrap_dataset_for_transforms_v2(test_dataset)
 
     train_dataloader = DataLoader(
         train_dataset, 
@@ -155,9 +165,36 @@ def main(args):
         num_workers=args.num_workers,
         # pin_memory=True, persistent_workers=True
     )
+    test_dataloader = DataLoader(
+        test_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        # pin_memory=True, persistent_workers=True
+    )
 
     # Define the model
-    model = UNet
+    if args.model == "unet":
+        model = UNet
+    elif args.model == "deeplab":
+        model = smp.DeepLabV3Plus(
+            encoder_name=args.decoder,
+            encoder_weights="imagenet",
+            decoder_channels=512,
+            decoder_atrous_rates=(6, 12, 18),
+            in_channels=3,
+            classes=19,
+            activation=None,
+            aux_params=dict(
+                pooling="avg",
+                dropout=0.2,
+                activation="softmax2d",
+                classes=19
+            )
+        )
+    else:
+        raise ValueError(f"Model {args.model} is not supported, choose a different model")
+    model = model.to(device)
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
@@ -176,7 +213,7 @@ def main(args):
     best_valid_loss = float('inf')
     current_best_model_path = None
     for epoch in range(args.epochs):
-        print(f"Epoch {epoch+1:04}/{args.epochs:04}")
+        print(f"Epoch {epoch + 1:04}/{args.epochs:04}")
 
         # Training
         model.train()
@@ -281,6 +318,23 @@ def main(args):
             f"final_model-epoch={epoch:04}-val_loss={valid_loss:04}.pth"
         )
     )
+
+    # Evaluate the model on artificial test set.
+    model.to('cpu')
+    model.eval()
+    print(f"Size of {args.model}, backbone: {args.backbone if args.backbone is not None else ""} model")
+    print_size_of_model(model)
+
+    num_eval_batches = 64
+    dice_avg = evaluate(model, criterion, test_dataloader, neval_batches=num_eval_batches)
+    print(f'Evaluation accuracy on {num_eval_batches * args.batch_size} images, dice: {dice_avg}')
+
+    print("GPU:")
+    benchmark_model(model, test_dataloader, device=device)
+
+    print("CPU:")
+    benchmark_model(model, test_dataloader, device=torch.device("cpu"))
+
     wandb.finish()
 
 
