@@ -46,9 +46,13 @@ def benchmark_model(model, data_loader, device, num_batches=64, num_warmup=2):
     dummy_input = torch.randn(1, *input_shape[1:]).to(device)
 
     # Calculate MACs and parameters using thop
-    macs, params = profile(model, inputs=(dummy_input,))
-    print(f"Computational complexity: {macs / 1e9:.2f} GMACs")
-    print(f"Number of parameters: {params / 1e6:.2f} M")
+    try:
+        macs, params = profile(model, inputs=(dummy_input,))
+        print(f"Computational complexity: {macs / 1e9:.2f} GMACs")
+        print(f"Number of parameters: {params / 1e6:.2f} M")
+    except Exception as e:
+        print(f"Failed FLOPS evaluation: {e}")
+
 
     # Warm-up to stabilize GPU performance
     data_iter = iter(data_loader)
