@@ -324,9 +324,9 @@ def main(args):
     print(f"Size of {args.model} model" + (f", decoder: {args.decoder}" if args.decoder else ""))
     print_size_of_model(model)
 
-    num_eval_batches = 64
+    num_eval_batches = 20
     dice_avg = evaluate(model, criterion, test_dataloader, neval_batches=num_eval_batches)
-    print(f'Evaluation accuracy on {num_eval_batches * args.batch_size} images, dice: {dice_avg}')
+    print(f'Evaluation accuracy on test dataset, {num_eval_batches * args.batch_size} images, dice: {dice_avg}')
 
     print("GPU:")
     model.to(device)

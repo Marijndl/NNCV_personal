@@ -268,6 +268,8 @@ def convert_train_id_to_color(prediction: torch.Tensor) -> torch.Tensor:
 def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_classes=19):
     model.eval()
     dice_meter = AverageMeter('Dice', ':6.6f')  # Track Dice scores
+    prec_meter = AverageMeter('Precision', ':6.6f')  # Track Precision scores
+    rec_meter = AverageMeter('Recall', ':6.6f')  # Track Recall scores
     cnt = 0
 
     with torch.no_grad():
@@ -280,13 +282,36 @@ def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_cla
             loss = criterion(output, target)
             cnt += 1
 
+            # Calculate metrics
             dice = dice_score(output, target, num_classes)
-            dice_meter.update(dice, image.size(0))  # Update average meter
+            dice_meter.update(dice, image.size(0))
+
+            # Calculate precision and recall
+            output_preds = torch.argmax(output, dim=1)  # Convert logits to predictions
+            true_positives = (output_preds & target).sum().float()
+            predicted_positives = output_preds.sum().float()
+            actual_positives = target.sum().float()
+
+            precision = true_positives / (predicted_positives + 1e-10)  # Add epsilon to avoid division by zero
+            recall = true_positives / (actual_positives + 1e-10)  # Add epsilon to avoid division by zero
+
+            prec_meter.update(precision, image.size(0))
+            rec_meter.update(recall, image.size(0))
 
             if cnt >= neval_batches:
                 break
 
-    return dice_meter.avg  # Return the final average Dice score
+    # Calculate F1 score using average precision and recall
+    avg_precision = prec_meter.avg
+    avg_recall = rec_meter.avg
+    f1_score = 2 * (avg_precision * avg_recall) / (avg_precision + avg_recall + 1e-10)
+
+    print(f"Evaluation metrics - Dice: {dice_meter.avg:6.6f}, "
+          f"Precision: {avg_precision:6.6f}, "
+          f"Recall: {avg_recall:6.6f}, "
+          f"F1: {f1_score:6.6f}")
+
+    return dice_meter.avg  # Keeping return value consistent with original
 
 
 def rename_state_dict_keys(state_dict):
