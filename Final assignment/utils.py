@@ -110,6 +110,9 @@ def benchmark_model(model, data_loader, device, num_batches=64, num_warmup=2):
     print(f"Images per second: {images_per_second:.2f}")
 
 class MotionBlurTransform(T.Transform):
+    def __init__(self):
+        super().__init__()
+
     def __call__(self, sample):
         image, mask = sample
         p = torch.rand(1).item()
