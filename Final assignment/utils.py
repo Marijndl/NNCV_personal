@@ -114,6 +114,12 @@ class MotionBlurTransform(object):
         super().__init__()
 
     def __call__(self, image, mask):
+        # Remove any unexpected leading dimensions (e.g., [1, 3, H, W] -> [3, H, W])
+        if image.dim() == 4 and image.shape[0] == 1:
+            image = image.squeeze(0)
+        if mask.dim() == 3 and mask.shape[0] == 1:
+            mask = mask.squeeze(0)
+            
         p = torch.rand(1).item()
         if p > 0.5:
             # Sample c between 1 and C, C is 19 for Cityscapes (0-18, ignoring 255)
