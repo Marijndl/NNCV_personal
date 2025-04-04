@@ -303,7 +303,8 @@ def main(args):
                 torch.save(model.state_dict(), model_path)
                 saved_models.append(model_path)
 
-                model.save_pretrained('./resnest101e')
+                if args.model == "deeplab":
+                    model.save_pretrained(f'./{args.model + "-" + args.decoder}')
                 if len(saved_models) > max_saved_models:
                     os.remove(saved_models.pop(0))  # Remove the oldest model
         
