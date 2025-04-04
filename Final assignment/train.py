@@ -78,8 +78,7 @@ def get_args_parser():
     parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
     parser.add_argument("--model", type=str, default="unet", help="Choose the model to train")
     parser.add_argument("--decoder", type=str, default="resnext101_32x8d", help="Decoder name for the DeepLabV3+ model")
-    parser.add_argument("--motion-blur", type=bool, default=False, help="Wether to include the motion blur data augmentation")
-
+    parser.add_argument("--motion-blur", action="store_true", help="Whether to include the motion blur data augmentation")
     return parser
 
 
@@ -108,14 +107,13 @@ def main(args):
     # Define the transforms to apply to the images
     # Define the transforms to apply to the images
     transform_train = Compose([
-          ToImage(),
-          RandomHorizontalFlip(0.5),
-          # RandomCrop((512, 1024)),  # Crop to focus on smaller details
-          Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
-          ToDtype(torch.float32, scale=True),
-          Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-      # ] + [MotionBlurTransform()] if args.motion_blur else [])
-        ])
+        ToImage(),
+        RandomHorizontalFlip(0.5),
+        Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
+        ToDtype(torch.float32, scale=True),
+        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        MotionBlurTransform() if args.motion_blur else lambda image, mask: (image, mask)  # Add conditionally
+    ])
 
     transform_val = Compose([
         ToImage(),

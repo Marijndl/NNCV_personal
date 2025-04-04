@@ -113,8 +113,7 @@ class MotionBlurTransform(object):
     def __init__(self):
         super().__init__()
 
-    def __call__(self, sample):
-        image, mask = sample
+    def __call__(self, image, mask):
         p = torch.rand(1).item()
         if p > 0.5:
             # Sample c between 1 and C, C is 19 for Cityscapes (0-18, ignoring 255)
@@ -146,7 +145,7 @@ class MotionBlurTransform(object):
                 non_blurred_part = image * (1 - Mf.unsqueeze(0))
                 # Combine: where Mf=1 use blurred, else original
                 image = blurred_part + non_blurred_part
-        return image, mask
+        return (image, mask)
 
 
 def dice_score(preds, targets, num_classes=19, ignore_index=255, smooth=1e-6):
