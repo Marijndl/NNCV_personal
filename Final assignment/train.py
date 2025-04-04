@@ -114,7 +114,7 @@ def main(args):
           Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
           ToDtype(torch.float32, scale=True),
           Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-      ] + ([MotionBlurTransform()] if args.motion_blur else []))
+      ] + [MotionBlurTransform()] if args.motion_blur else [])
 
     transform_val = Compose([
         ToImage(),
