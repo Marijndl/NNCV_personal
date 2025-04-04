@@ -109,7 +109,7 @@ def benchmark_model(model, data_loader, device, num_batches=64, num_warmup=2):
     print(f"Inference time per image: {time_ms:.2f} ms")
     print(f"Images per second: {images_per_second:.2f}")
 
-class MotionBlurTransform(T.Transform):
+class MotionBlurTransform(object):
     def __init__(self):
         super().__init__()
 
