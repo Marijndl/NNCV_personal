@@ -329,9 +329,11 @@ def main(args):
     print(f'Evaluation accuracy on {num_eval_batches * args.batch_size} images, dice: {dice_avg}')
 
     print("GPU:")
+    model.to(device)
     benchmark_model(model, test_dataloader, device=device)
 
     print("CPU:")
+    model.to('cpu')
     benchmark_model(model, test_dataloader, device=torch.device("cpu"))
 
     wandb.finish()
