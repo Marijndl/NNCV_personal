@@ -109,8 +109,12 @@ def benchmark_model(model, data_loader, device, num_batches=64, num_warmup=2):
     print(f"Inference time per image: {time_ms:.2f} ms")
     print(f"Images per second: {images_per_second:.2f}")
 
-class MotionBlurTransform:
-    def __call__(self, image, mask):
+class MotionBlurTransform(T.Transform):
+    def __init__(self):
+        super().__init__()
+
+    def __call__(self, sample):
+        image, mask = sample
         p = torch.rand(1).item()
         if p > 0.5:
             # Sample c between 1 and C, C is 19 for Cityscapes (0-18, ignoring 255)
