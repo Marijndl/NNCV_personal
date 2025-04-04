@@ -126,7 +126,6 @@ class MotionBlurTransform(object):
             if c > 0:
                 # Randomly select c classes
                 selected_classes = classes[torch.randperm(len(classes))[:c]]
-                print(f"Selected classes: {selected_classes}")
 
                 # Create Mf by summing masks for selected classes
                 Mf = torch.zeros_like(mask, dtype=torch.float32)

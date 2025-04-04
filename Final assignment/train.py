@@ -321,7 +321,7 @@ def main(args):
     # Evaluate the model on artificial test set.
     model.to('cpu')
     model.eval()
-    print(f"Size of {args.model} model" + (f", backbone: {args.backbone}" if args.backbone else ""))
+    print(f"Size of {args.model} model" + (f", decoder: {args.decoder}" if args.decoder else ""))
     print_size_of_model(model)
 
     num_eval_batches = 64
