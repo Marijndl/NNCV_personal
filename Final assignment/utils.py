@@ -114,16 +114,6 @@ class MotionBlurTransform(object):
         super().__init__()
 
     def __call__(self, image, mask):
-        # Remove any unexpected leading dimensions (e.g., [1, 3, H, W] -> [3, H, W])
-        had_extra_dim_im = False
-        had_extra_dim_mask = False
-        if image.dim() == 4 and image.shape[0] == 1:
-            image = image.squeeze(0)
-            had_extra_dim_im = True
-        if mask.dim() == 3 and mask.shape[0] == 1:
-            mask = mask.squeeze(0)
-            had_extra_dim_mask = True
-
         p = torch.rand(1).item()
         if p > 0.5:
             # Sample c between 1 and C, C is 19 for Cityscapes (0-18, ignoring 255)
@@ -156,10 +146,15 @@ class MotionBlurTransform(object):
                 # Combine: where Mf=1 use blurred, else original
                 image = blurred_part + non_blurred_part
 
-        if had_extra_dim_im:  # Replace 'or True' with just 'if had_extra_dim' if you only want to restore it conditionally
-            image = image.unsqueeze(0)
-        if had_extra_dim_mask:  # Replace 'or True' with just 'if had_extra_dim' if you only want to restore it conditionally
-            mask = mask.unsqueeze(0)
+        # Remove any unexpected leading dimensions (e.g., [1, 3, H, W] -> [3, H, W])
+        had_extra_dim_im = False
+        had_extra_dim_mask = False
+        if image.dim() == 4 and image.shape[0] == 1:
+            image = image.squeeze(0)
+            had_extra_dim_im = True
+        if mask.dim() == 3 and mask.shape[0] == 1:
+            mask = mask.squeeze(0)
+            had_extra_dim_mask = True
 
         return (image, mask)
 
