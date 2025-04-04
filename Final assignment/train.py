@@ -174,7 +174,7 @@ def main(args):
 
     # Define the model
     if args.model == "unet":
-        model = UNet
+        model = UNet(in_channels=3, n_classes=19, quantize=False)
     elif args.model == "deeplab":
         model = smp.DeepLabV3Plus(
             encoder_name=args.decoder,
