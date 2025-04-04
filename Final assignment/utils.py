@@ -146,14 +146,10 @@ class MotionBlurTransform(object):
                 image = blurred_part + non_blurred_part
 
         # Remove any unexpected leading dimensions (e.g., [1, 3, H, W] -> [3, H, W])
-        had_extra_dim_im = False
-        had_extra_dim_mask = False
         if image.dim() == 4 and image.shape[0] == 1:
             image = image.squeeze(0)
-            had_extra_dim_im = True
         if mask.dim() == 3 and mask.shape[0] == 1:
             mask = mask.squeeze(0)
-            had_extra_dim_mask = True
 
         return (image, mask)
 
