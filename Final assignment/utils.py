@@ -279,8 +279,8 @@ def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_cla
 
             target = target.long().squeeze(1)  # Remove channel dimension
             output = model(image)
-            if isinstance(outputs, tuple):  # Some segmentation models return (logits, aux_output)
-                outputs = outputs[0]  # Keep only the segmentation output
+            if isinstance(output, tuple):  # Some segmentation models return (logits, aux_output)
+                output = output[0]  # Keep only the segmentation output
 
             loss = criterion(output, target)
             cnt += 1
