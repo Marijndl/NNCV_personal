@@ -265,7 +265,7 @@ def convert_train_id_to_color(prediction: torch.Tensor) -> torch.Tensor:
     return color_image
 
 
-def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_classes=19):
+def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_classes=19, ignore_index=255):
     model.eval()
     dice_meter = AverageMeter('Dice', ':6.6f')  # Track Dice scores
     prec_meter = AverageMeter('Precision', ':6.6f')  # Track Precision scores
@@ -273,7 +273,7 @@ def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_cla
     cnt = 0
 
     with torch.no_grad():
-        for i, (image, target) in tqdm(enumerate(data_loader), total=neval_batches - 1, desc="Evaluating", leave=True):
+        for i, (image, target) in tqdm(enumerate(data_loader), total=min(len(data_loader), neval_batches), desc="Evaluating", leave=True):
             target = convert_to_train_id(target)  # Convert class IDs to train IDs
             image, target = image.to(device), target.to(device)
 
@@ -291,12 +291,14 @@ def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_cla
 
             # Calculate precision and recall
             output_preds = torch.argmax(output, dim=1)  # Convert logits to predictions
-            true_positives = (output_preds & target).sum().float()
-            predicted_positives = output_preds.sum().float()
-            actual_positives = target.sum().float()
+            # Mask out ignore index if needed
+            valid_mask = (target != ignore_index)
+            true_positives = ((output_preds == target) & valid_mask).sum().float()
+            predicted_positives = (valid_mask & (output_preds != ignore_index)).sum().float()
+            actual_positives = valid_mask.sum().float()
 
-            precision = true_positives / (predicted_positives + 1e-10)  # Add epsilon to avoid division by zero
-            recall = true_positives / (actual_positives + 1e-10)  # Add epsilon to avoid division by zero
+            precision = true_positives / (predicted_positives + 1e-10)
+            recall = true_positives / (actual_positives + 1e-10)
 
             prec_meter.update(precision, image.size(0))
             rec_meter.update(recall, image.size(0))
