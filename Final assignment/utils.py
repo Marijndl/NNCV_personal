@@ -17,6 +17,7 @@ from tqdm import tqdm
 from unet import UNet
 
 import time
+import numpy as np
 from thop import profile
 
 
@@ -36,6 +37,7 @@ def benchmark_model(model, data_loader, device, num_batches=64, num_warmup=2):
         Number of parameters in millions.
         Inference time per image in ms.
         Images per second.
+        Interquartile range (IQR) of both metrics.
     """
     model.eval()
 
@@ -70,6 +72,8 @@ def benchmark_model(model, data_loader, device, num_batches=64, num_warmup=2):
     # Timing loop, accounting for actual number of images per batch
     total_time = 0
     total_images = 0
+    per_image_times = []
+
     for i in range(num_batches):
         try:
             image, _ = next(data_iter)
@@ -96,6 +100,7 @@ def benchmark_model(model, data_loader, device, num_batches=64, num_warmup=2):
 
         total_time += batch_time
         total_images += num_images
+        per_image_times.extend([batch_time / num_images] * num_images)
 
     if total_images == 0:
         print("No images were processed.")
@@ -106,8 +111,18 @@ def benchmark_model(model, data_loader, device, num_batches=64, num_warmup=2):
     time_ms = average_time_per_image * 1000
     images_per_second = 1 / average_time_per_image if average_time_per_image > 0 else float('inf')
 
-    print(f"Inference time per image: {time_ms:.2f} ms")
-    print(f"Images per second: {images_per_second:.2f}")
+    # Interquartile range calculations
+    q1_time = np.percentile(per_image_times, 25)
+    q3_time = np.percentile(per_image_times, 75)
+    iqr_time = q3_time - q1_time
+
+    per_image_fps = [1 / t if t > 0 else float('inf') for t in per_image_times]
+    q1_fps = np.percentile(per_image_fps, 25)
+    q3_fps = np.percentile(per_image_fps, 75)
+    iqr_fps = q3_fps - q1_fps
+
+    print(f"Inference time per image: {time_ms:.2f} ± {iqr_time * 1000:.2f} ms")
+    print(f"Images per second: {images_per_second:.2f} ± {iqr_fps:.2f}")
 
 class MotionBlurTransform(object):
     def __init__(self):
@@ -270,6 +285,7 @@ def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_cla
     dice_meter = AverageMeter('Dice', ':6.6f')  # Track Dice scores
     prec_meter = AverageMeter('Precision', ':6.6f')  # Track Precision scores
     rec_meter = AverageMeter('Recall', ':6.6f')  # Track Recall scores
+    dice_score_list = []
     cnt = 0
 
     with torch.no_grad():
@@ -287,6 +303,7 @@ def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_cla
 
             # Calculate metrics
             dice = dice_score(output, target, num_classes)
+            dice_score_list.append(dice)
             dice_meter.update(dice, image.size(0))
 
             # Calculate precision and recall
@@ -310,8 +327,9 @@ def evaluate(model, criterion, data_loader, neval_batches, device='cpu', num_cla
     avg_precision = prec_meter.avg
     avg_recall = rec_meter.avg
     f1_score = 2 * (avg_precision * avg_recall) / (avg_precision + avg_recall + 1e-10)
+    std_dice = np.std(np.array(dice_score_list))
 
-    print(f"Evaluation metrics - Dice: {dice_meter.avg:6.6f}, "
+    print(f"Evaluation metrics - Dice: {dice_meter.avg:6.3f} ± {std_dice:.3f}, "
           f"Precision: {avg_precision:6.6f}, "
           f"Recall: {avg_recall:6.6f}, "
           f"F1: {f1_score:6.6f}")
