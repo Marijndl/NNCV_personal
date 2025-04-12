@@ -1,82 +1,104 @@
 from argparse import ArgumentParser
 
 import torch.nn as nn
-from argparse import ArgumentParser
-
-import torch.nn as nn
-from torch.utils.data import DataLoader
-from torchvision.transforms.v2 import (
-    Compose,
-    Normalize,
-    Resize,
-    ToImage,
-    ToDtype,
-)
 
 from utils import *
-from calflops import calculate_flops
 
 
 def get_args_parser():
     parser = ArgumentParser("Training script for a PyTorch U-Net model")
-    parser.add_argument("--data-dir", type=str, default="D:\Cityscapes", help="Path to the training data")
+    parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
+    parser.add_argument("--model-file", type=str, default="./quant_models/unet_noaug_float.pth",
+                        help="Path to the float model")
     parser.add_argument("--batch-size", type=int, default=8, help="Training batch size")
-    parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
-    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
-    parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
-    parser.add_argument("--decoder", type=str, default="resnext101_32x8d", help="Decoder name for the DeepLabV3+ model")
-
     return parser
 
 
 def main(args):
-    saved_model_dir = r'C:\Users\20203226\Documents\GitHub\NNCV\Final assignment\models'
-    float_model_file = r'\unet_float.pth'
-    scripted_float_model_file = 'unet_quantization_scripted.pth2'
-    scripted_quantized_model_file = 'unet_quantization_scripted_quantized.pth2'
+    # Set seed for reproducability
+    torch.manual_seed(args.seed)
+    torch.backends.cudnn.deterministic = True
+
+    saved_model_dir = "/".join(args.model_file.split("/")[:-1]) + "/"
+    float_model_file = args.model_file
+    scripted_float_model_file = 'unet_quantization_scripted.pth'
+    scripted_quantized_model_file = 'unet_quantization_scripted_quantized.pth'
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    train_batch_size = 32
     eval_batch_size = args.batch_size
     # Load the dataset and make a split for training and validation
     # Define the transforms to apply to the data
     transform = Compose([
         ToImage(),
-        Resize((256, 256), antialias=True),
+        Resize((512, 512), antialias=True),
         ToDtype(torch.float32, scale=True),
-        Normalize((0.2854, 0.3227, 0.2819), (0.04797, 0.04296, 0.04188)),
+        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
 
-    train_dataset = Cityscapes(args.data_dir, split="train", mode="fine", target_type="semantic",
-                               transforms=transform, )
-    valid_dataset = Cityscapes(args.data_dir, split="val", mode="fine", target_type="semantic", transforms=transform, )
+    # Load the dataset and make a split for training and validation
+    train_dataset = Cityscapes(
+        args.data_dir,
+        split="train",
+        mode="fine",
+        target_type="semantic",
+        transforms=transform,
+    )
+    valid_dataset = Cityscapes(
+        args.data_dir,
+        split="val",
+        mode="fine",
+        target_type="semantic",
+        transforms=transform,
+    )
+    test_dataset = Cityscapes(
+        args.data_dir,
+        split="test",
+        mode="fine",
+        target_type="semantic",
+        transforms=transform,
+    )
 
     train_dataset = wrap_dataset_for_transforms_v2(train_dataset)
     valid_dataset = wrap_dataset_for_transforms_v2(valid_dataset)
+    test_dataset = wrap_dataset_for_transforms_v2(test_dataset)
 
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        # pin_memory=True, persistent_workers=True
     )
     valid_dataloader = DataLoader(
         valid_dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        # pin_memory=True, persistent_workers=True
     )
-    criterion = nn.CrossEntropyLoss(ignore_index=255)
-    float_model = load_model(saved_model_dir + float_model_file, quantize=False).to('cpu')
+    test_dataloader = DataLoader(
+        test_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+    )
 
-    flops, macs, params = calculate_flops(model=float_model, input_shape=(64, 3, 256, 256))
-    print(f"Float model FLOPs: {flops}, MACs: {macs}, Params: {params}")
+    criterion = nn.CrossEntropyLoss(ignore_index=255)
+    float_model = load_model(float_model_file, quantize=False).to("cpu")
+
+    # Evaluate the model on artificial test set.
+    float_model.to('cpu')
+    float_model.eval()
+
+    num_eval_batches = 20
+    dice_avg = evaluate(float_model, criterion, test_dataloader, neval_batches=num_eval_batches)
+    print(f'Evaluation accuracy on test dataset, {num_eval_batches * args.batch_size} images, dice: {dice_avg}')
+
+    print("CPU:")
+    float_model.to('cpu')
+    benchmark_model(float_model, test_dataloader, device=torch.device("cpu"))
 
     # Next, we'll "fuse modules"; this can both make the model faster by saving on memory access
     # while also improving numerical accuracy. While this can be used with any model, this is
@@ -86,9 +108,6 @@ def main(args):
     float_model.eval()
 
     print("--------------------------------------")
-
-    # for name, module in float_model.named_modules():
-    #     print(name, type(module))
 
     # Fuses modules
     float_model.to('cpu')
@@ -123,11 +142,18 @@ def main(args):
     torch.ao.quantization.convert(per_channel_quantized_model, inplace=True)
 
     # Evaluation after quantization:
-    print("Size of model after quantization")
+    per_channel_quantized_model.to('cpu')
+    per_channel_quantized_model.eval()
+    print(f"Size of quantized model")
     print_size_of_model(per_channel_quantized_model)
 
-    dice_avg = evaluate(per_channel_quantized_model, criterion, valid_dataloader, neval_batches=num_eval_batches)
-    print(f'Evaluation accuracy on {num_eval_batches * eval_batch_size} images, dice: {dice_avg}')
+    num_eval_batches = 20
+    dice_avg = evaluate(per_channel_quantized_model, criterion, test_dataloader, neval_batches=num_eval_batches)
+    print(f'Evaluation accuracy on test dataset, {num_eval_batches * args.batch_size} images, dice: {dice_avg}')
+
+    print("CPU:")
+    per_channel_quantized_model.to('cpu')
+    benchmark_model(per_channel_quantized_model, test_dataloader, device=torch.device("cpu"))
     torch.jit.save(torch.jit.script(per_channel_quantized_model), saved_model_dir + scripted_quantized_model_file)
 
 
