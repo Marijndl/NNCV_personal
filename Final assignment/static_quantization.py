@@ -127,7 +127,7 @@ def main(args):
     torch.jit.save(torch.jit.script(float_model), saved_model_dir + scripted_float_model_file)
 
     # Fine tune model on training data
-    per_channel_quantized_model = load_model(saved_model_dir + float_model_file, quantize=True)
+    per_channel_quantized_model = load_model(float_model_file, quantize=True)
     per_channel_quantized_model = per_channel_quantized_model.to('cpu')
     per_channel_quantized_model.eval()
     per_channel_quantized_model.fuse_model()
