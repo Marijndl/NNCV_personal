@@ -154,6 +154,7 @@ def main(args):
     print("CPU:")
     per_channel_quantized_model.to('cpu')
     benchmark_model(per_channel_quantized_model, test_dataloader, device=torch.device("cpu"))
+    del per_channel_quantized_model.total_ops  # Or don't include it at all
     torch.jit.save(torch.jit.script(per_channel_quantized_model), saved_model_dir + scripted_quantized_model_file)
 
 
