@@ -142,6 +142,8 @@ def main(args):
     torch.ao.quantization.convert(per_channel_quantized_model, inplace=True)
 
     # Evaluation after quantization:
+    torch.jit.save(torch.jit.script(per_channel_quantized_model), saved_model_dir + scripted_quantized_model_file)
+
     per_channel_quantized_model.to('cpu')
     per_channel_quantized_model.eval()
     print(f"Size of quantized model")
@@ -154,9 +156,6 @@ def main(args):
     print("CPU:")
     per_channel_quantized_model.to('cpu')
     benchmark_model(per_channel_quantized_model, test_dataloader, device=torch.device("cpu"))
-    del per_channel_quantized_model.total_ops  # Or don't include it at all
-    torch.jit.save(torch.jit.script(per_channel_quantized_model), saved_model_dir + scripted_quantized_model_file)
-
 
 if __name__ == "__main__":
     parser = get_args_parser()
