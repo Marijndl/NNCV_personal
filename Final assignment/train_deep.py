@@ -1,13 +1,13 @@
 """
-This script implements a training loop for the model. It is designed to be flexible, 
+This script implements a training loop for the model. It is designed to be flexible,
 allowing you to easily modify hyperparameters using a command-line argument parser.
 
 ### Key Features:
-1. **Hyperparameter Tuning:** Adjust hyperparameters by parsing arguments from the `main.sh` script or directly 
+1. **Hyperparameter Tuning:** Adjust hyperparameters by parsing arguments from the `main.sh` script or directly
    via the command line.
-2. **Remote Execution Support:** Since this script runs on a server, training progress is not visible on the console. 
+2. **Remote Execution Support:** Since this script runs on a server, training progress is not visible on the console.
    To address this, we use the `wandb` library for logging and tracking progress and results.
-3. **Encapsulation:** The training loop is encapsulated in a function, enabling it to be called from the main block. 
+3. **Encapsulation:** The training loop is encapsulated in a function, enabling it to be called from the main block.
    This ensures proper execution when the script is run directly.
 
 Feel free to customize the script as needed for your use case.
@@ -36,7 +36,7 @@ from torchvision.transforms.v2 import (
     RandomHorizontalFlip,
 
 )
-from utils import * 
+from utils import *
 
 from unet import UNet
 import segmentation_models_pytorch as smp
@@ -76,9 +76,8 @@ def get_args_parser():
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
-    parser.add_argument("--model", type=str, default="unet", help="Choose the model to train")
     parser.add_argument("--decoder", type=str, default="resnext101_32x8d", help="Decoder name for the DeepLabV3+ model")
-    parser.add_argument("--motion-blur", action="store_true", help="Whether to include the motion blur data augmentation")
+
     return parser
 
 
@@ -95,7 +94,7 @@ def main(args):
     os.makedirs(output_dir, exist_ok=True)
 
     # Set seed for reproducability
-    # If you add other sources of randomness (NumPy, Random), 
+    # If you add other sources of randomness (NumPy, Random),
     # make sure to set their seeds as well
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = True
@@ -105,14 +104,13 @@ def main(args):
     print(f"Using device: {device}")
 
     # Define the transforms to apply to the images
-    # Define the transforms to apply to the images
     transform_train = Compose([
         ToImage(),
         RandomHorizontalFlip(0.5),
+        # RandomCrop((512, 1024)),  # Crop to focus on smaller details
         Resize((512, 512), interpolation=InterpolationMode.BILINEAR, antialias=True),
         ToDtype(torch.float32, scale=True),
         Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-        MotionBlurTransform() if args.motion_blur else lambda image, mask: (image, mask)  # Add conditionally
     ])
 
     transform_val = Compose([
@@ -121,25 +119,18 @@ def main(args):
         ToDtype(torch.float32, scale=True),
         Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
-    
+
     # Load the dataset and make a split for training and validation
     train_dataset = Cityscapes(
-        args.data_dir, 
-        split="train", 
-        mode="fine", 
-        target_type="semantic", 
+        args.data_dir,
+        split="train",
+        mode="fine",
+        target_type="semantic",
         transforms=transform_train,
     )
     valid_dataset = Cityscapes(
-        args.data_dir, 
-        split="val", 
-        mode="fine", 
-        target_type="semantic", 
-        transforms=transform_val,
-    )
-    test_dataset = Cityscapes(
         args.data_dir,
-        split="test",
+        split="val",
         mode="fine",
         target_type="semantic",
         transforms=transform_val,
@@ -147,24 +138,16 @@ def main(args):
 
     train_dataset = wrap_dataset_for_transforms_v2(train_dataset)
     valid_dataset = wrap_dataset_for_transforms_v2(valid_dataset)
-    test_dataset = wrap_dataset_for_transforms_v2(test_dataset)
 
     train_dataloader = DataLoader(
-        train_dataset, 
-        batch_size=args.batch_size, 
+        train_dataset,
+        batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
         # pin_memory=True, persistent_workers=True
     )
     valid_dataloader = DataLoader(
-        valid_dataset, 
-        batch_size=args.batch_size, 
-        shuffle=False,
-        num_workers=args.num_workers,
-        # pin_memory=True, persistent_workers=True
-    )
-    test_dataloader = DataLoader(
-        test_dataset,
+        valid_dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
@@ -172,27 +155,21 @@ def main(args):
     )
 
     # Define the model
-    if args.model == "unet":
-        model = UNet(in_channels=3, n_classes=19, quantize=False)
-    elif args.model == "deeplab":
-        model = smp.DeepLabV3Plus(
-            encoder_name=args.decoder,
-            encoder_weights="imagenet",
-            decoder_channels=512,
-            decoder_atrous_rates=(6, 12, 18),
-            in_channels=3,
-            classes=19,
-            activation=None,
-            aux_params=dict(
-                pooling="avg",
-                dropout=0.2,
-                activation="softmax2d",
-                classes=19
-            )
+    model = smp.DeepLabV3Plus(
+        encoder_name=args.decoder,
+        encoder_weights="imagenet",
+        decoder_channels=512,
+        decoder_atrous_rates=(6, 12, 18),
+        in_channels=3,
+        classes=19,
+        activation=None,
+        aux_params=dict(
+            pooling="avg",
+            dropout=0.2,
+            activation="softmax2d",
+            classes=19
         )
-    else:
-        raise ValueError(f"Model {args.model} is not supported, choose a different model")
-    model.to(device)
+    ).to(device)
 
     # Define the loss function
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
@@ -241,7 +218,7 @@ def main(args):
                 "learning_rate": optimizer.param_groups[0]['lr'],
                 "epoch": epoch + 1,
             }, step=epoch * len(train_dataloader) + i)
-            
+
         # Validation
         model.eval()
         with torch.no_grad():
@@ -265,7 +242,7 @@ def main(args):
                 # losses_dice.append(loss_dice.item())
                 losses.append(loss.item())
                 dice_scores.append(dice)
-            
+
                 if i == 0:
                     predictions = outputs.softmax(1).argmax(1)
 
@@ -285,7 +262,7 @@ def main(args):
                         "predictions": [wandb.Image(predictions_img)],
                         "labels": [wandb.Image(labels_img)],
                     }, step=(epoch + 1) * len(train_dataloader) - 1)
-            
+
             # valid_loss_dice = sum(losses_dice) / len(losses_dice)
             valid_loss = sum(losses) / len(losses)
 
@@ -302,11 +279,10 @@ def main(args):
                 torch.save(model.state_dict(), model_path)
                 saved_models.append(model_path)
 
-                if args.model == "deeplab":
-                    model.save_pretrained(f'./{args.model + "-" + args.decoder}')
+                model.save_pretrained('./resnest101e')
                 if len(saved_models) > max_saved_models:
                     os.remove(saved_models.pop(0))  # Remove the oldest model
-        
+
     print("Training complete!")
 
     # Save the model
@@ -317,25 +293,6 @@ def main(args):
             f"final_model-epoch={epoch:04}-val_loss={valid_loss:04}.pth"
         )
     )
-
-    # Evaluate the model on artificial test set.
-    model.to('cpu')
-    model.eval()
-    print(f"Size of {args.model} model" + (f", decoder: {args.decoder}" if args.decoder else ""))
-    print_size_of_model(model)
-
-    num_eval_batches = 20
-    dice_avg = evaluate(model, criterion, test_dataloader, neval_batches=num_eval_batches)
-    print(f'Evaluation accuracy on test dataset, {num_eval_batches * args.batch_size} images, dice: {dice_avg}')
-
-    print("GPU:")
-    model.to(device)
-    benchmark_model(model, test_dataloader, device=device)
-
-    print("CPU:")
-    model.to('cpu')
-    benchmark_model(model, test_dataloader, device=torch.device("cpu"))
-
     wandb.finish()
 
 

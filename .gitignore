@@ -178,3 +178,4 @@ cython_debug/
 /Weekly notebooks/*.pth
 /submission
 *.pth
+/Final assignment/output_files
