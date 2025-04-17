@@ -78,7 +78,7 @@ def get_args_parser():
 
 
 def main(args):
-    saved_model_dir = r'models'
+    saved_model_dir = r'../models'
     float_model_file = r'\unet_float.pth'
     scripted_float_model_file = 'unet_quantization_scripted.pth'
     scripted_quantized_model_file = 'unet_quantization_scripted_quantized.pth'
@@ -100,7 +100,7 @@ def main(args):
     valid_dataloader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     run_benchmark(saved_model_dir + scripted_quantized_model_file, valid_dataloader, device='cpu')
-    run_benchmark(r"models/unet_float.pth", valid_dataloader, device='cpu')
+    run_benchmark(r"../models/unet_float.pth", valid_dataloader, device='cpu')
     run_benchmark(saved_model_dir + scripted_float_model_file, valid_dataloader, device='cpu')
 
 
