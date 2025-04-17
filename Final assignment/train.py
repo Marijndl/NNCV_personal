@@ -77,7 +77,7 @@ def get_args_parser():
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
     parser.add_argument("--model", type=str, default="unet", help="Choose the model to train")
-    parser.add_argument("--decoder", type=str, default="resnext101_32x8d", help="Decoder name for the DeepLabV3+ model")
+    parser.add_argument("--encoder", type=str, default="resnext101_32x8d", help="Encoder name for the DeepLabV3+ model")
     parser.add_argument("--motion-blur", action="store_true", help="Whether to include the motion blur data augmentation")
     return parser
 
@@ -176,7 +176,7 @@ def main(args):
         model = UNet(in_channels=3, n_classes=19, quantize=False)
     elif args.model == "deeplab":
         model = smp.DeepLabV3Plus(
-            encoder_name=args.decoder,
+            encoder_name=args.encoder,
             encoder_weights="imagenet",
             decoder_channels=512,
             decoder_atrous_rates=(6, 12, 18),
@@ -303,7 +303,7 @@ def main(args):
                 saved_models.append(model_path)
 
                 if args.model == "deeplab":
-                    model.save_pretrained(f'./{args.model + "-" + args.decoder}')
+                    model.save_pretrained(f'./{args.model + "-" + args.encoder}')
                 if len(saved_models) > max_saved_models:
                     os.remove(saved_models.pop(0))  # Remove the oldest model
         
@@ -321,7 +321,7 @@ def main(args):
     # Evaluate the model on artificial test set.
     model.to('cpu')
     model.eval()
-    print(f"Size of {args.model} model" + (f", decoder: {args.decoder}" if args.decoder else ""))
+    print(f"Size of {args.model} model" + (f", encoder: {args.encoder}" if args.encoder else ""))
     print_size_of_model(model)
 
     num_eval_batches = 20

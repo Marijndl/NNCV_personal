@@ -58,11 +58,11 @@ To start working on the project, follow these steps:
 1. Open a terminal or the VSCode terminal on your local system.
 2. Clone this repository to your local machine:  
     ```bash
-    git clone https://github.com/TUE-VCA/NNCV
+    git clone https://github.com/Marijndl/NNCV_personal/
     ```
 3. Navigate into the cloned repository directory:
     ```bash
-    cd NNCV
+    cd NNCV_personal
     ```
 
 #### Step 2: Create your own repository on GitHub

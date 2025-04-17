@@ -1,11 +1,11 @@
-# Cityscapes Semantic Segmentation with U-Net/DeepLabV3+ and Quantization
+# Cityscapes Semantic Segmentation with U-Net/DeepLabV3+, Class-Centric Motion-Blur and Quantization
 
 This repository contains code for training and evaluating semantic segmentation models (U-Net, DeepLabV3+) on the Cityscapes dataset. It includes features for model training, post-training static quantization, performance benchmarking, and execution on both local machines and SLURM-based HPC clusters using Apptainer/Singularity containers.
 
 ## Author
 
 Marijn de Lange, Technical University Eindhoven, Eindhoven, The Netherlands.
-Email: `m.p.d.lange@student.tue.nl`
+Email: [m.p.d.lange@student.tue.nl](mailto:m.p.d.lange@student.tue.nl)
 Codalab username: `Marijndl`
 
 ## Features
@@ -47,7 +47,7 @@ Follow the instructions based on your execution environment (Local Machine or SL
 ### 1. Clone the Repository
 
 ```bash
-git https://github.com/Marijndl/NNCV_personal/
+git clone https://github.com/Marijndl/NNCV_personal/
 cd NNCV_personal/Final\ assignment/
 ```
 
@@ -119,7 +119,7 @@ The main job submission script is `jobscript_slurm.sh`. It executes other shell 
 
 2.  **Configure Experiment Script (`main.sh` or `quant.sh`):**
     *   **For Training:** Edit `main.sh`.
-        *   Adjust hyperparameters passed to `train.py`, such as `--batch-size`, `--epochs`, `--lr`, `--model`, `--decoder`, `--experiment-id`.
+        *   Adjust hyperparameters passed to `train.py`, such as `--batch-size`, `--epochs`, `--lr`, `--model`, `--encoder`, `--experiment-id`.
         *   Ensure `--data-dir` points to `./data/cityscapes`.
         *   The script first sets up a virtual environment *inside* the container's execution context and installs some dependencies like `fvcore`, `torch_tensorrt` etc. if not present.
     *   **For Quantization:** Edit `quant.sh`.
@@ -146,6 +146,8 @@ The main job submission script is `jobscript_slurm.sh`. It executes other shell 
 
 ### Running Locally
 
+*Note: Before running, a local copy of the Cityscapes dataset should be installed on your machine.*
+
 1.  **Activate your local virtual environment:**
     ```bash
     source venv/bin/activate # or conda activate cityscapes_env
@@ -161,7 +163,7 @@ The main job submission script is `jobscript_slurm.sh`. It executes other shell 
         --seed 42 \
         --experiment-id "local-unet-training" \
         --model "unet" # or "deeplab"
-        # Add other arguments as needed, such as --motion-blur
+        # Add other arguments as needed, such as --motion-blur or --encoder "encoder_name" when training a deeplab model 
     ```
     *Remember to `wandb login` first if you haven't.*
 
