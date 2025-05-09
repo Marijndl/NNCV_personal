@@ -179,3 +179,9 @@ cython_debug/
 /submission
 *.pth
 /Final assignment/output_files
+Quantized_models_Marijn/unet_noaug_quantization/robustness/scores.txt
+Quantized_models_Marijn/unet_noaug_quantization/efficiency/scores.txt
+Quantized_models_Marijn/unet_noaug_quantization/efficiency/all_dice_scores.txt
+Quantized_models_Marijn/unet_aug_quantization/robustness/scores.txt
+Quantized_models_Marijn/unet_aug_quantization/efficiency/scores.txt
+Quantized_models_Marijn/unet_aug_quantization/efficiency/all_dice_scores.txt
